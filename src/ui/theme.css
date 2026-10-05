@@ -1,0 +1,64 @@
+:root {
+  --bg: #121418;
+  --bg-raised: #1c1f26;
+  --bg-sunken: #0c0d10;
+  --border: #2d313b;
+  --text: #eef0f3;
+  --text-dim: #9aa1ad;
+  --copper: #d9822b;
+  --copper-bright: #f0a04b;
+  --brass: #d4af37;
+  --aluminum: #b8c4cc;
+  --steel: #707a84;
+  --good: #66bb6a;
+  --warn: #ffb74d;
+  --bad: #ef5350;
+  --info: #64b5f6;
+  --dalton: #4caf50;
+  --tomothy: #29b6f6;
+  --dunkin: #ef5350;
+  --radius: 10px;
+  --shadow: 0 8px 30px rgb(0 0 0 / 0.45);
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Arial Black', 'Helvetica Neue', Impact, system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--copper-bright);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

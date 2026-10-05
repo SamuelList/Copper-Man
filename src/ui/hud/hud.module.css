@@ -1,0 +1,301 @@
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px #000a;
+}
+
+.card {
+  background: rgb(14 16 20 / 0.78);
+  border: 1px solid #ffffff1a;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  backdrop-filter: blur(4px);
+}
+
+.topLeft,
+.topRight,
+.topCenter,
+.bottomLeft,
+.bottomRight,
+.bottomCenter {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.topLeft {
+  top: 12px;
+  left: 12px;
+}
+
+.topRight {
+  top: 12px;
+  right: 12px;
+  align-items: flex-end;
+}
+
+.topCenter {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+}
+
+.bottomLeft {
+  bottom: 12px;
+  left: 12px;
+}
+
+.bottomRight {
+  bottom: 12px;
+  right: 12px;
+  align-items: flex-end;
+}
+
+.bottomCenter {
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+}
+
+.label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.timer {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.timerLow {
+  color: var(--bad);
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.cash {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--good);
+}
+
+.hearts {
+  display: flex;
+  gap: 2px;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.heart {
+  color: #ef5350;
+}
+
+.heartLost {
+  color: #ffffff2a;
+}
+
+.bag {
+  width: 260px;
+}
+
+.bagBar {
+  display: flex;
+  height: 14px;
+  margin: 6px 0 4px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--bg-sunken);
+  border: 1px solid #ffffff22;
+}
+
+.bagSeg {
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.bagText {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.meterFill {
+  height: 100%;
+  background: var(--info);
+}
+
+.ability {
+  width: 230px;
+}
+
+.prompt {
+  min-width: 260px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.promptDisabled {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.progress {
+  height: 6px;
+  border-radius: 3px;
+  margin-top: 6px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--copper-bright);
+}
+
+.detection {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 220px;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.eye {
+  font-size: 1.2rem;
+}
+
+.detectBar {
+  width: 90px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.detectFill {
+  height: 100%;
+  transition: width 0.1s linear;
+}
+
+.spotted {
+  border-color: var(--bad);
+  color: #ffcdd2;
+  animation: pulse 0.6s ease-in-out infinite;
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: #ffb74d22;
+  border: 1px solid #ffb74d55;
+  color: var(--warn);
+}
+
+.toasts {
+  position: absolute;
+  top: 120px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  max-width: 340px;
+}
+
+.toast {
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  background: rgb(14 16 20 / 0.85);
+  border-left: 4px solid var(--info);
+  font-size: 0.85rem;
+  animation: slideIn 0.2s ease-out;
+}
+
+.toast[data-tone='good'] {
+  border-left-color: var(--good);
+}
+
+.toast[data-tone='warn'] {
+  border-left-color: var(--warn);
+}
+
+.toast[data-tone='bad'] {
+  border-left-color: var(--bad);
+}
+
+.controls {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  max-width: 380px;
+}
+
+.banner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle, #0009, #000c);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.bannerText {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 8vw, 5.5rem);
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.bannerSub {
+  font-size: 1.1rem;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(20px);
+    opacity: 0;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
