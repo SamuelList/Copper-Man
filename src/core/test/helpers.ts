@@ -31,6 +31,7 @@ export const input = (overrides: Partial<PlayerInput> = {}): PlayerInput => ({
   sprint: false,
   interact: false,
   ability: false,
+  crouch: false,
   ...overrides,
 });
 

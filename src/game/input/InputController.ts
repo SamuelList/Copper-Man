@@ -1,56 +1,88 @@
 import type { PlayerInput } from '@core/session/types';
-import Phaser from 'phaser';
 
-type HeldKeys = Record<
-  'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'sprint' | 'interact' | 'interactAlt',
-  Phaser.Input.Keyboard.Key
->;
+/** Ground-plane basis of the screen, so "W" walks toward the top of the screen. */
+export interface ScreenBasis {
+  screenUp: { x: number; y: number };
+  screenRight: { x: number; y: number };
+}
+
+const GAME_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Space',
+  'KeyW',
+  'KeyA',
+  'KeyS',
+  'KeyD',
+  'KeyE',
+  'KeyQ',
+  'KeyC',
+  'ShiftLeft',
+  'ShiftRight',
+]);
 
 /**
- * Turns raw devices into action-level `PlayerInput`. Keyboard today; gamepad/touch can be
- * merged in here without the simulation knowing.
- *
- * Held actions are polled; one-shot actions (ability, pause) are captured from keydown events
- * so a quick tap is never lost between frames.
+ * Turns the keyboard into world-space `PlayerInput`. Movement is screen-relative (rotated into
+ * the fixed camera's frame). Held actions are polled; one-shot actions (ability, crouch toggle,
+ * pause) are captured on keydown so a quick tap is never lost between frames. Gamepad/touch can
+ * be merged in here without the simulation knowing.
  */
 export class InputController {
-  private readonly keys: HeldKeys;
+  private readonly held = new Set<string>();
   private abilityQueued = false;
   private pauseQueued = false;
+  private crouching = false;
 
-  constructor(scene: Phaser.Scene) {
-    const kb = scene.input.keyboard!;
-    const K = Phaser.Input.Keyboard.KeyCodes;
-    this.keys = kb.addKeys({
-      up: K.UP,
-      down: K.DOWN,
-      left: K.LEFT,
-      right: K.RIGHT,
-      w: K.W,
-      a: K.A,
-      s: K.S,
-      d: K.D,
-      sprint: K.SHIFT,
-      interact: K.E,
-      interactAlt: K.SPACE,
-    }) as HeldKeys;
-    kb.addCapture([K.Q, K.ESC]);
-    kb.on('keydown-Q', () => (this.abilityQueued = true));
-    kb.on('keydown-ESC', () => (this.pauseQueued = true));
+  constructor(private readonly target: Window = window) {
+    target.addEventListener('keydown', this.onKeyDown);
+    target.addEventListener('keyup', this.onKeyUp);
+    target.addEventListener('blur', this.onBlur);
   }
 
-  read(): PlayerInput {
-    const k = this.keys;
-    const x = Number(k.right.isDown || k.d.isDown) - Number(k.left.isDown || k.a.isDown);
-    const y = Number(k.down.isDown || k.s.isDown) - Number(k.up.isDown || k.w.isDown);
+  private onKeyDown = (e: KeyboardEvent) => {
+    const el = e.target as HTMLElement | null;
+    // Let buttons and form fields keep their own keys (Space/Enter on the pause menu).
+    const onControl = el && ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+    if (e.code === 'Escape') {
+      if (!e.repeat) this.pauseQueued = true;
+      return;
+    }
+    if (onControl) return;
+    if (GAME_KEYS.has(e.code)) e.preventDefault();
+    if (e.repeat) return;
+    this.held.add(e.code);
+    if (e.code === 'KeyQ') this.abilityQueued = true;
+    if (e.code === 'KeyC') this.crouching = !this.crouching;
+  };
+
+  private onKeyUp = (e: KeyboardEvent) => {
+    this.held.delete(e.code);
+  };
+
+  private onBlur = () => {
+    this.held.clear();
+  };
+
+  private down(...codes: string[]) {
+    return codes.some((c) => this.held.has(c));
+  }
+
+  read(basis: ScreenBasis): PlayerInput {
+    const sx = Number(this.down('KeyD', 'ArrowRight')) - Number(this.down('KeyA', 'ArrowLeft'));
+    const sy = Number(this.down('KeyW', 'ArrowUp')) - Number(this.down('KeyS', 'ArrowDown'));
+    const moveX = sx * basis.screenRight.x + sy * basis.screenUp.x;
+    const moveY = sx * basis.screenRight.y + sy * basis.screenUp.y;
     const ability = this.abilityQueued;
     this.abilityQueued = false;
     return {
-      moveX: x,
-      moveY: y,
-      sprint: k.sprint.isDown,
-      interact: k.interact.isDown || k.interactAlt.isDown,
+      moveX,
+      moveY,
+      sprint: this.down('ShiftLeft', 'ShiftRight'),
+      interact: this.down('KeyE', 'Space'),
       ability,
+      crouch: this.crouching,
     };
   }
 
@@ -59,5 +91,11 @@ export class InputController {
     const pressed = this.pauseQueued;
     this.pauseQueued = false;
     return pressed;
+  }
+
+  dispose() {
+    this.target.removeEventListener('keydown', this.onKeyDown);
+    this.target.removeEventListener('keyup', this.onKeyUp);
+    this.target.removeEventListener('blur', this.onBlur);
   }
 }

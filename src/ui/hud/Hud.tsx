@@ -2,7 +2,7 @@ import { METAL_IDS, METALS } from '@core/content/metals';
 import { NPCS } from '@core/content/npcs';
 import { bagFree, bagTotal } from '@core/systems/bag';
 import { useShiftStore, type Toast } from '@state/shiftStore';
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Kbd } from '../components';
 import { clock, css, money, units } from '../format';
@@ -273,6 +273,30 @@ function Toasts() {
   );
 }
 
+/** How visible you are: the light where you stand, and whether you're crouched. */
+function VisibilityCard() {
+  const { light, crouching } = useShiftStore(
+    useShallow((s) => ({
+      light: Math.round((s.snapshot?.light ?? 1) * 20) / 20,
+      crouching: s.snapshot?.crouching ?? false,
+    })),
+  );
+  const label = light >= 0.75 ? 'Bright' : light >= 0.45 ? 'Dim' : 'Dark';
+  const hint = light >= 0.75 ? 'easy to spot' : light >= 0.45 ? 'harder to spot' : 'hard to spot';
+  return (
+    <div className={[styles.card, styles.visibility].join(' ')} data-testid="visibility">
+      <span className={styles.lightGem} style={{ '--light': light } as CSSProperties} aria-hidden />
+      <span>
+        <strong>{label}</strong> <span className={styles.label}>{hint}</span>
+        <br />
+        <span className={styles.label}>
+          {crouching ? 'Crouching · hidden behind low cover' : 'Standing'} · <Kbd>C</Kbd>
+        </span>
+      </span>
+    </div>
+  );
+}
+
 function Controls() {
   return (
     <div className={styles.controls}>
@@ -283,7 +307,13 @@ function Controls() {
         <Kbd>E</Kbd> hold to interact
       </span>
       <span>
+        <Kbd>C</Kbd> crouch
+      </span>
+      <span>
         <Kbd>Q</Kbd> ability
+      </span>
+      <span>
+        <Kbd>Wheel</Kbd> zoom
       </span>
       <span>
         <Kbd>Esc</Kbd> pause
@@ -341,6 +371,7 @@ export function Hud() {
         <PromptCard />
       </div>
       <div className={styles.bottomRight}>
+        <VisibilityCard />
         <AbilityCard />
       </div>
       <EndBanner />

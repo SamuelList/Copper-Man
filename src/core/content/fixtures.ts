@@ -16,6 +16,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 60, max: 120 },
     workSeconds: 3,
     risk: 'very high',
+    cover: 'low',
     color: 0xd9822b,
   },
   {
@@ -28,6 +29,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 45, max: 60 },
     workSeconds: 4,
     risk: 'high',
+    cover: 'low',
     color: 0x90caf9,
   },
   {
@@ -40,6 +42,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 45, max: 60 },
     workSeconds: 4,
     risk: 'high',
+    cover: 'low',
     color: 0xff7043,
   },
   {
@@ -52,6 +55,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 45, max: 60 },
     workSeconds: 4,
     risk: 'high',
+    cover: 'none',
     color: 0x80cbc4,
   },
   {
@@ -64,6 +68,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 45, max: 60 },
     workSeconds: 4,
     risk: 'medium',
+    cover: 'low',
     color: 0xbcaaa4,
   },
   {
@@ -76,6 +81,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 30, max: 45 },
     workSeconds: 3,
     risk: 'medium',
+    cover: 'low',
     color: 0xeceff1,
   },
   {
@@ -88,6 +94,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 30, max: 45 },
     workSeconds: 3,
     risk: 'low',
+    cover: 'low',
     color: 0x78909c,
   },
   {
@@ -100,6 +107,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 30, max: 45 },
     workSeconds: 2,
     risk: 'low',
+    cover: 'none',
     color: 0xfff176,
   },
   {
@@ -112,6 +120,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     recharge: { min: 30, max: 45 },
     workSeconds: 2.5,
     risk: 'low',
+    cover: 'low',
     color: 0x8d6e63,
   },
 ]);

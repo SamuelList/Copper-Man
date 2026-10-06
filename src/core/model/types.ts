@@ -65,6 +65,17 @@ export interface FixtureDef {
   /** Seconds to strip for a baseline worker (see BALANCE.scrapping). */
   workSeconds: number;
   risk: RiskLevel;
+  /** Waist-high fixtures hide a crouching worker. */
+  cover: 'low' | 'none';
+  color: number;
+}
+
+/** Non-interactive furniture. Tall props block sight; low props are cover. */
+export interface PropDef {
+  id: string;
+  name: string;
+  glyph: string;
+  height: 'tall' | 'low';
   color: number;
 }
 

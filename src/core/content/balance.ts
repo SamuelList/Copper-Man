@@ -1,3 +1,4 @@
+import type { RoomKind } from '../level/types';
 import type { StatLevel } from '../model/types';
 
 /**
@@ -23,6 +24,10 @@ export const BALANCE = {
     staminaRegenDelay: 0.75,
     reach: TILE_SIZE * 1.15,
     caughtGraceSeconds: 3,
+    /** Crouching halves speed (and disables sprint) but hides you behind low cover. */
+    crouchSpeedMult: 0.5,
+    /** How far the player can see (fog of war). */
+    sightRange: TILE_SIZE * 16,
   },
   bag: {
     capacityByCarry: stat({ 1: 1.5, 2: 2, 3: 2.5 }),
@@ -55,10 +60,21 @@ export const BALANCE = {
     vision: {
       range: stat({ 1: TILE_SIZE * 4.5, 2: TILE_SIZE * 6.5, 3: TILE_SIZE * 8 }),
       fovDegrees: stat({ 1: 70, 2: 80, 3: 95 }),
-      /** Detection meter gained per second at max range (doubles up close). */
+      /** Detection meter gained per second at max range (rises toward the near zone). */
       fillRate: stat({ 1: 0.6, 2: 0.85, 3: 1.2 }),
       decayRate: 0.45,
+      /** Inner part of the cone (fraction of range) where you're spotted fast. */
+      nearFraction: 0.4,
+      nearMult: 2.6,
+      /** Low cover hides a crouching target when it's within this distance of them. */
+      coverReach: TILE_SIZE * 1.6,
+      /** In total darkness, detection fills this fraction as fast… */
+      darkFillMult: 0.35,
+      /** …and NPCs can only spot you at this fraction of their range. */
+      darkRangeMult: 0.55,
     },
+    /** NPCs out of your sight are still heard within this distance. */
+    hearingRange: TILE_SIZE * 5,
   },
   boss: {
     chaseMult: 1.6,
@@ -79,5 +95,19 @@ export const BALANCE = {
     idleSeconds: { min: 1.5, max: 4 },
     alarmSeconds: 2,
     alertCooldownSeconds: 8,
+  },
+  /** Room light levels, 0 (pitch dark) to 1 (fully lit). Rooms can override with `light`. */
+  light: {
+    byRoomKind: {
+      exterior: 0.8,
+      hallway: 1,
+      classroom: 0.85,
+      restroom: 0.8,
+      closet: 0.4,
+      lounge: 0.6,
+      boiler: 0.25,
+    } satisfies Record<RoomKind, number>,
+    /** Doorways and anything outside a room. */
+    fallback: 0.75,
   },
 } as const;

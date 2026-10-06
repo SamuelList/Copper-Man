@@ -1,5 +1,5 @@
 import { testLevel } from '../test/helpers';
-import { parseAsciiLevel, roomAt, tileAt, validateLevel } from './asciiLevel';
+import { lightAt, parseAsciiLevel, roomAt, tileAt, validateLevel } from './asciiLevel';
 import { SCHOOL_LEVEL } from './levels/school';
 
 describe('ASCII level parser', () => {
@@ -17,6 +17,17 @@ describe('ASCII level parser', () => {
     expect(tileAt(level, 0, 0)).toBe('wall');
     expect(tileAt(level, -1, 0)).toBe('wall');
     expect(tileAt(level, 3, 1)).toBe('fixture');
+  });
+
+  it('parses furniture props and room light levels', () => {
+    const level = testLevel(['#####', '#POt#', '#1.2#', '#####'], '12', [
+      { id: 'dim', name: 'Dim', kind: 'closet', rect: { col: 0, row: 0, w: 5, h: 2 } },
+      { id: 'lit', name: 'Lit', kind: 'hallway', rect: { col: 0, row: 2, w: 5, h: 2 }, light: 0.9 },
+    ]);
+    expect(level.props.map((p) => p.defId)).toEqual(['lockers', 'table']);
+    expect(tileAt(level, 2, 1)).toBe('prop');
+    expect(lightAt(level, 1, 1)).toBe(0.4); // closet default
+    expect(lightAt(level, 1, 2)).toBe(0.9); // explicit override
   });
 
   it('rejects ragged rows, unknown glyphs and missing markers', () => {
@@ -69,6 +80,17 @@ describe('school level', () => {
       (f) => roomAt(SCHOOL_LEVEL, f.tile.col, f.tile.row)?.id === 'boiler',
     );
     expect(inBoiler.some((f) => f.defId === 'copper-pile')).toBe(true);
+  });
+
+  it('is darkest in the boiler room and furnished for cover', () => {
+    const boiler = SCHOOL_LEVEL.rooms.find((r) => r.kind === 'boiler')!;
+    const hall = SCHOOL_LEVEL.rooms.find((r) => r.kind === 'hallway')!;
+    expect(lightAt(SCHOOL_LEVEL, boiler.rect.col + 1, boiler.rect.row + 1)).toBeLessThan(
+      lightAt(SCHOOL_LEVEL, hall.rect.col + 1, hall.rect.row + 1),
+    );
+    const kinds = new Set(SCHOOL_LEVEL.props.map((p) => p.defId));
+    expect(kinds.has('lockers')).toBe(true);
+    expect(kinds.has('boiler')).toBe(true);
   });
 
   it('keeps every fixture type in play', () => {

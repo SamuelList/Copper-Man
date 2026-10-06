@@ -64,6 +64,8 @@ describe('Hud', () => {
     escalation: 0,
     suspicious: true,
     grace: 0,
+    crouching: true,
+    light: 0.25,
   };
 
   it('renders the shift snapshot (board example: bag 2, holding 0.25, left 1.75)', () => {
@@ -75,6 +77,8 @@ describe('Hud', () => {
     expect(screen.getByTestId('bag')).toHaveTextContent('Left 1.75');
     expect(screen.getByTestId('interact-prompt')).toHaveTextContent('Scrap — Wall Heater');
     expect(screen.getByLabelText('2 of 3 hearts left')).toBeInTheDocument();
+    expect(screen.getByTestId('visibility')).toHaveTextContent('Dark');
+    expect(screen.getByTestId('visibility')).toHaveTextContent('Crouching');
   });
 
   it('shows toasts and the end-of-shift banner', () => {

@@ -184,3 +184,79 @@ describe('ShiftSession', () => {
     expect(s.boss.pos.x).toBeGreaterThan(0);
   });
 });
+
+describe('ShiftSession stealth: crouching, cover, light, sight', () => {
+  // Boss starts at 1 facing east, a desk (k) and a locker (O) sit between it and the player.
+  const STEALTH = ['##########', '#1...k.P.#', '#2.......#', '#V..O...Z#', '##########'];
+  const fullRoom = (light?: number) => [
+    {
+      id: 'all',
+      name: 'All',
+      kind: 'hallway' as const,
+      rect: { col: 0, row: 0, w: 10, h: 5 },
+      light,
+    },
+  ];
+
+  function stealthSession(light?: number) {
+    const s = new ShiftSession({
+      level: testLevel(STEALTH, '12', fullRoom(light)),
+      characterId: 'dunkin',
+      ownedUpgrades: [],
+      day: 1,
+      warnings: 0,
+      seed: 1,
+      durationSeconds: 60,
+    });
+    s.boss.facing = 0;
+    s.bag = { ...s.bag, contents: { ...s.bag.contents, copper: 0.5 } }; // suspicious
+    return s;
+  }
+
+  it('crouching moves at half speed and blocks sprinting', () => {
+    const walk = stealthSession();
+    const crouch = stealthSession();
+    placePlayer(walk, 2, 2);
+    placePlayer(crouch, 2, 2);
+    hold(walk, 0.5, input({ moveX: 1 }));
+    hold(crouch, 0.5, input({ moveX: 1, crouch: true, sprint: true }));
+    const walked = walk.player.pos.x - 2.5 * TILE_SIZE;
+    const crept = crouch.player.pos.x - 2.5 * TILE_SIZE;
+    expect(crept).toBeCloseTo(walked / 2, 0);
+    expect(crouch.player.sprinting).toBe(false);
+    expect(crouch.getSnapshot().crouching).toBe(true);
+  });
+
+  it('a crouching worker behind a desk is not spotted; standing they are', () => {
+    const standing = stealthSession();
+    placePlayer(standing, 6, 1);
+    hold(standing, 0.2, input());
+    expect(standing.boss.detection).toBeGreaterThan(0);
+
+    const crouched = stealthSession();
+    placePlayer(crouched, 6, 1);
+    hold(crouched, 0.2, input({ crouch: true }));
+    expect(crouched.boss.detection).toBe(0);
+  });
+
+  it('spots you more slowly in the dark', () => {
+    const lit = stealthSession(1);
+    const dark = stealthSession(0.15);
+    placePlayer(lit, 4, 2);
+    placePlayer(dark, 4, 2);
+    hold(lit, 0.2, input());
+    hold(dark, 0.2, input());
+    expect(dark.getSnapshot().light).toBeCloseTo(0.15);
+    expect(dark.boss.detection).toBeGreaterThan(0);
+    expect(dark.boss.detection).toBeLessThan(lit.boss.detection * 0.6);
+  });
+
+  it('tall props block sight; low props are cover', () => {
+    const s = stealthSession();
+    placePlayer(s, 2, 2);
+    expect(s.grid.isOpaque(4, 3)).toBe(true); // locker
+    expect(s.grid.isLowCover(5, 1)).toBe(true); // desk
+    expect(s.isVisibleToPlayer({ x: 6.5 * TILE_SIZE, y: 3.5 * TILE_SIZE })).toBe(false);
+    expect(s.isVisibleToPlayer({ x: 6.5 * TILE_SIZE, y: 1.5 * TILE_SIZE })).toBe(true);
+  });
+});

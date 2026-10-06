@@ -15,9 +15,12 @@ const MAP = [
 const level = testLevel(MAP);
 const grid = testGrid(MAP);
 const nav = { cols: grid.cols, rows: grid.rows, tileSize: TILE_SIZE, passable: grid.bossPassable };
-const tuning = { walkSpeed: 80, range: TILE_SIZE * 6, fillRate: 1 };
+const tuning = { walkSpeed: 80 };
+/** Detection gain used whenever a test says the NPC sees the player. */
+const SEE_RATE = 1.5;
 
 function ctx(overrides: Partial<BossContext> = {}): BossContext {
+  const sees = overrides.sees ?? false;
   return {
     dt: 0.05,
     nav,
@@ -28,6 +31,7 @@ function ctx(overrides: Partial<BossContext> = {}): BossContext {
     speedMult: 1,
     tuning,
     ...overrides,
+    rate: overrides.rate ?? (sees ? SEE_RATE : 0),
   };
 }
 
@@ -92,7 +96,7 @@ describe('boss brain', () => {
 describe('student brain', () => {
   const area = { col: 1, row: 1, w: 10, h: 4 };
   const studentNav = { ...nav, passable: grid.studentPassable };
-  const sTuning = { walkSpeed: 55, range: TILE_SIZE * 5, fillRate: 0.75 };
+  const sTuning = { walkSpeed: 55 };
 
   it('wanders within its room', () => {
     const rng = createRng(3);
@@ -103,6 +107,7 @@ describe('student brain', () => {
         dt: 0.05,
         nav: studentNav,
         sees: false,
+        rate: 0,
         playerPos: center(1, 4),
         rng,
         tuning: sTuning,
@@ -125,6 +130,7 @@ describe('student brain', () => {
           dt: 0.05,
           nav: studentNav,
           sees: true,
+          rate: SEE_RATE,
           playerPos: center(7, 2),
           rng,
           tuning: sTuning,

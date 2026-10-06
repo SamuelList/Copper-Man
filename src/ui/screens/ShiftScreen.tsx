@@ -1,7 +1,7 @@
 import { DEFAULT_LEVEL_ID, LEVELS } from '@core/level/levels';
 import type { ShiftConfig, ShiftSummary } from '@core/session/types';
 import { randomSeed } from '@core/util/rng';
-import { PhaserGame } from '@game/PhaserGame';
+import { GameView } from '@game/GameView';
 import { useAppStore } from '@state/appStore';
 import { useCareerStore } from '@state/careerStore';
 import { useShiftStore } from '@state/shiftStore';
@@ -30,8 +30,8 @@ function PauseOverlay() {
           Clock out early
         </Button>
         <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
-          <Kbd>WASD</Kbd> move · <Kbd>Shift</Kbd> sprint · <Kbd>E</Kbd> interact · <Kbd>Q</Kbd>{' '}
-          ability · <Kbd>Esc</Kbd> pause
+          <Kbd>WASD</Kbd> move · <Kbd>Shift</Kbd> sprint · <Kbd>E</Kbd> interact · <Kbd>C</Kbd>{' '}
+          crouch · <Kbd>Q</Kbd> ability · <Kbd>Wheel</Kbd> zoom · <Kbd>Esc</Kbd> pause
         </p>
       </Panel>
     </div>
@@ -66,7 +66,7 @@ export function ShiftScreen() {
 
   return (
     <div className={styles.shift}>
-      <PhaserGame config={config} onShiftEnd={onShiftEnd} className={styles.gameHost} />
+      <GameView config={config} onShiftEnd={onShiftEnd} className={styles.gameHost} />
       <Hud />
       {paused && <PauseOverlay />}
     </div>

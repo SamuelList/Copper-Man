@@ -22,6 +22,8 @@ export interface PlayerInput {
   interact: boolean;
   /** Pressed this frame. */
   ability: boolean;
+  /** Desired crouch state (the input layer handles toggling). */
+  crouch: boolean;
 }
 
 export interface PlayerState {
@@ -29,6 +31,7 @@ export interface PlayerState {
   facing: number;
   moving: boolean;
   sprinting: boolean;
+  crouching: boolean;
   stamina: number;
   staminaDelay: number;
   /** Seconds of post-catch protection remaining. */
@@ -152,4 +155,7 @@ export interface ShiftSnapshot {
   escalation: number;
   suspicious: boolean;
   grace: number;
+  crouching: boolean;
+  /** Light level where the player stands (0 dark..1 lit). */
+  light: number;
 }

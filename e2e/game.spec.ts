@@ -5,7 +5,7 @@ interface DebugWindow {
   __copper?: {
     session: {
       elapsed: number;
-      player: { pos: { x: number; y: number }; abilityActive: number };
+      player: { pos: { x: number; y: number }; abilityActive: number; crouching: boolean };
       boss: { pos: { x: number; y: number }; mode: string };
       bag: { capacity: number; contents: Record<string, number> };
     };
@@ -20,7 +20,9 @@ async function waitForSession(page: Page) {
   });
 }
 
-test('a full day: hire, sneak, sell, clock out, shop, next day', async ({ page }, testInfo) => {
+test('a full day: hire, sneak, crouch, sell, clock out, shop, next day', async ({
+  page,
+}, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
@@ -54,6 +56,17 @@ test('a full day: hire, sneak, sell, clock out, shop, next day', async ({ page }
   await expect
     .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.player.abilityActive))
     .toBeGreaterThan(0);
+
+  // C toggles crouching; the HUD light meter reflects it.
+  await page.keyboard.press('c');
+  await expect
+    .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.player.crouching))
+    .toBe(true);
+  await expect(page.getByTestId('visibility')).toContainText('Crouching');
+  await page.keyboard.press('c');
+  await expect
+    .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.player.crouching))
+    .toBe(false);
 
   // Pause and resume with Esc / the overlay.
   await page.keyboard.press('Escape');

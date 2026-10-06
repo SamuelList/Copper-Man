@@ -7,10 +7,10 @@ import tseslint from 'typescript-eslint';
 /**
  * Architecture boundaries. Dependencies flow one way:
  *   ui → game → state → core
- * - core:  pure TypeScript game rules + content (no Phaser, React or Zustand) — unit-testable, portable.
+ * - core:  pure TypeScript game rules + content (no Three.js, React or Zustand) — unit-testable, portable.
  * - state: Zustand stores; may use core only.
- * - game:  Phaser renderer/input; drives the core simulation and writes to state.
- * - ui:    React screens + HUD; reads state, mounts <PhaserGame />, never imports Phaser.
+ * - game:  Three.js renderer/input; drives the core simulation and writes to state.
+ * - ui:    React screens + HUD; reads state, mounts <GameView />, never imports Three.js.
  */
 const restrict = (patterns) => ['error', { patterns }];
 
@@ -43,7 +43,7 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': restrict([
         {
-          group: ['phaser', 'react', 'react-dom', 'zustand', 'zustand/*'],
+          group: ['three', 'three/*', 'react', 'react-dom', 'zustand', 'zustand/*'],
           message: 'core must stay framework-free.',
         },
         {
@@ -65,7 +65,7 @@ export default tseslint.config(
     files: ['src/state/**/*.ts'],
     rules: {
       'no-restricted-imports': restrict([
-        { group: ['phaser'], message: 'state must stay renderer-agnostic.' },
+        { group: ['three', 'three/*'], message: 'state must stay renderer-agnostic.' },
         {
           group: ['@game/*', '@ui/*', '**/game/**', '**/ui/**'],
           message: 'state may only depend on core.',
@@ -78,8 +78,8 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': restrict([
         {
-          group: ['phaser'],
-          message: 'ui must not import Phaser; mount <PhaserGame /> from @game instead.',
+          group: ['three', 'three/*'],
+          message: 'ui must not import Three.js; mount <GameView /> from @game instead.',
         },
       ]),
     },

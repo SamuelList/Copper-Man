@@ -8,7 +8,7 @@ import { FIXTURES } from '../content/fixtures';
 import { emptyContents, METAL_IDS } from '../content/metals';
 import { NPCS } from '../content/npcs';
 import { Emitter } from '../events/emitter';
-import { roomAt } from '../level/asciiLevel';
+import { lightAt, roomAt } from '../level/asciiLevel';
 import { tileCenter, worldToTile } from '../level/grid';
 import type { LevelDef } from '../level/types';
 import type {
@@ -26,7 +26,8 @@ import { bossSpeedMult, escalationLevel } from '../systems/escalation';
 import { moveWithCollision } from '../systems/movement';
 import { rollRecharge, rollYield, scrapDuration } from '../systems/scrapping';
 import { deriveStats } from '../systems/stats';
-import { canSee, type ViewCone } from '../systems/vision';
+import { detectionRate, effectiveRange } from '../systems/detection';
+import { hasLineOfSight, inCone, lineOfSight, type ViewCone } from '../systems/vision';
 import { addWarning, recoverHeart } from '../systems/warnings';
 import { deg, dist, round2 } from '../util/math';
 import { createRng, type Rng } from '../util/rng';
@@ -122,6 +123,7 @@ export class ShiftSession {
       facing: 0,
       moving: false,
       sprinting: false,
+      crouching: false,
       stamina: this.stats.staminaSeconds,
       staminaDelay: 0,
       grace: 0,
@@ -159,6 +161,24 @@ export class ShiftSession {
 
   get currentTarget(): InteractionTarget | null {
     return this.focus;
+  }
+
+  /** Light level (0 dark..1 lit) where the player is standing. */
+  get playerLight(): number {
+    const t = worldToTile(TILE_SIZE, this.player.pos.x, this.player.pos.y);
+    return lightAt(this.level, t.col, t.row);
+  }
+
+  /** Fog of war: can the worker see this point from where they stand? */
+  isVisibleToPlayer(pos: Vec2): boolean {
+    return (
+      dist(this.player.pos, pos) <= P.sightRange && hasLineOfSight(this.grid, this.player.pos, pos)
+    );
+  }
+
+  /** Out of sight but close enough to hear (footsteps). */
+  canHear(pos: Vec2): boolean {
+    return dist(this.player.pos, pos) <= BALANCE.npc.hearingRange;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -217,7 +237,8 @@ export class ShiftSession {
       my /= len;
     }
 
-    p.sprinting = p.moving && input.sprint && p.stamina > 0;
+    p.crouching = input.crouch;
+    p.sprinting = p.moving && input.sprint && !p.crouching && p.stamina > 0;
     if (p.sprinting) {
       p.stamina = Math.max(0, p.stamina - dt);
       p.staminaDelay = P.staminaRegenDelay;
@@ -229,7 +250,11 @@ export class ShiftSession {
 
     if (!p.moving) return;
     p.facing = Math.atan2(my, mx);
-    const speed = p.sprinting ? this.stats.sprintSpeed : this.stats.walkSpeed;
+    const speed = p.crouching
+      ? this.stats.walkSpeed * P.crouchSpeedMult
+      : p.sprinting
+        ? this.stats.sprintSpeed
+        : this.stats.walkSpeed;
     p.pos = moveWithCollision(this.grid, p.pos, P.radius, mx * speed * dt, my * speed * dt);
   }
 
@@ -418,6 +443,23 @@ export class ShiftSession {
     };
   }
 
+  /**
+   * How quickly this observer is filling its detection meter on the player right now
+   * (0 when the player isn't in view). Accounts for range, cone, walls, crouching behind low
+   * cover, the near/far zones, and how dark it is where the player stands.
+   */
+  private perceive(cone: ViewCone, fillRate: number): { sees: boolean; rate: number } {
+    const light = this.playerLight;
+    const range = effectiveRange(cone.range, light);
+    const target = this.player.pos;
+    const distance = dist(cone.pos, target);
+    const sees =
+      distance <= range &&
+      inCone({ ...cone, range }, target) &&
+      lineOfSight(this.grid, cone.pos, target, this.player.crouching);
+    return { sees, rate: sees ? detectionRate({ distance, range, fillRate, light }) : 0 };
+  }
+
   bossCone(): ViewCone {
     const lvl = NPCS.boss.awareness;
     return {
@@ -435,20 +477,18 @@ export class ShiftSession {
 
   private updateStudents(dt: number): Vec2 | null {
     let alert: Vec2 | null = null;
-    const lvl = NPCS.student.awareness;
-    const tuning = {
-      walkSpeed: BALANCE.npc.walkSpeed[NPCS.student.speed],
-      range: V.range[lvl],
-      fillRate: V.fillRate[lvl],
-    };
+    const fillRate = V.fillRate[NPCS.student.awareness];
+    const tuning = { walkSpeed: BALANCE.npc.walkSpeed[NPCS.student.speed] };
     for (const s of this.students) {
       // Students snitch on scrapping, not on someone walking by with a bag.
-      const sees =
-        this.suspicion.scrapping && canSee(this.grid, this.studentCone(s), this.player.pos);
+      const seen = this.suspicion.scrapping
+        ? this.perceive(this.studentCone(s), fillRate)
+        : { sees: false, rate: 0 };
       const shouted = updateStudent(s, {
         dt,
         nav: this.studentNav,
-        sees,
+        sees: seen.sees,
+        rate: seen.rate,
         playerPos: this.player.pos,
         rng: this.rng,
         tuning,
@@ -462,21 +502,19 @@ export class ShiftSession {
   }
 
   private updateBoss(dt: number, alert: Vec2 | null) {
-    const lvl = NPCS.boss.awareness;
-    const sees = this.isSuspicious && canSee(this.grid, this.bossCone(), this.player.pos);
+    const seen = this.isSuspicious
+      ? this.perceive(this.bossCone(), V.fillRate[NPCS.boss.awareness])
+      : { sees: false, rate: 0 };
     const result = updateBoss(this.boss, {
       dt,
       nav: this.bossNav,
       route: this.level.bossRoute,
-      sees,
+      sees: seen.sees,
+      rate: seen.rate,
       playerPos: this.player.pos,
       alert,
       speedMult: bossSpeedMult(this.escalationInput()),
-      tuning: {
-        walkSpeed: BALANCE.npc.walkSpeed[NPCS.boss.speed],
-        range: V.range[lvl],
-        fillRate: V.fillRate[lvl],
-      },
+      tuning: { walkSpeed: BALANCE.npc.walkSpeed[NPCS.boss.speed] },
     });
     if (result.modeChanged) {
       this.events.emit('boss:mode', { mode: this.boss.mode, previous: result.previousMode });
@@ -620,6 +658,8 @@ export class ShiftSession {
       escalation: this.escalation,
       suspicious: this.isSuspicious,
       grace: p.grace,
+      crouching: p.crouching,
+      light: this.playerLight,
     };
   }
 }

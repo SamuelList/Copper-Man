@@ -7,7 +7,8 @@ const executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined;
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
+  // Headless CI renders WebGL in software (SwiftShader), which is slow; give the full-day test room.
+  timeout: 180_000,
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',

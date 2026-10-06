@@ -1,7 +1,9 @@
+import { BALANCE } from '../content/balance';
 import { fixtureByGlyph } from '../content/fixtures';
+import { propByGlyph } from '../content/props';
 import type { TilePos } from '../model/types';
 import { findPath } from '../systems/pathfinding';
-import type { LevelDef, LevelDoor, LevelFixture, RoomDef, TileKind } from './types';
+import type { LevelDef, LevelDoor, LevelFixture, LevelProp, RoomDef, TileKind } from './types';
 
 /**
  * ASCII level format.
@@ -10,7 +12,8 @@ import type { LevelDef, LevelDoor, LevelFixture, RoomDef, TileKind } from './typ
  *   D  open doorway      L  locked door      V  van (deposit point)
  *   P  player spawn      S  student spawn    Z  sleepy-coworker hiding spot
  *   1-9  boss patrol waypoint markers (ordered by `bossRoute`)
- *   any fixture glyph from FIXTURES (C F H A R T M l k …)
+ *   any fixture glyph from FIXTURES (C F H A R T M l k …) — scrappable
+ *   any prop glyph from PROPS (O B h t b p …) — furniture: tall blocks sight, low is cover
  */
 export interface AsciiLevelSource {
   id: string;
@@ -32,6 +35,7 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
 
   const tiles: TileKind[] = [];
   const fixtures: LevelFixture[] = [];
+  const props: LevelProp[] = [];
   const doors: LevelDoor[] = [];
   const vanTiles: TilePos[] = [];
   const studentSpawns: TilePos[] = [];
@@ -61,10 +65,17 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
         if (markers.has(ch)) throw new Error(`Level "${src.id}" has duplicate marker "${ch}"`);
         markers.set(ch, tile);
       } else if (ch !== '.' && ch !== '=') {
-        const def = fixtureByGlyph(ch);
-        if (!def) throw new Error(`Level "${src.id}" has unknown glyph "${ch}" at ${col},${row}`);
-        kind = 'fixture';
-        fixtures.push({ id: `${def.id}-${col}-${row}`, defId: def.id, tile });
+        const fixture = fixtureByGlyph(ch);
+        const prop = fixture ? undefined : propByGlyph(ch);
+        if (fixture) {
+          kind = 'fixture';
+          fixtures.push({ id: `${fixture.id}-${col}-${row}`, defId: fixture.id, tile });
+        } else if (prop) {
+          kind = 'prop';
+          props.push({ id: `${prop.id}-${col}-${row}`, defId: prop.id, tile });
+        } else {
+          throw new Error(`Level "${src.id}" has unknown glyph "${ch}" at ${col},${row}`);
+        }
       }
       tiles.push(kind);
     }
@@ -85,6 +96,7 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
     tiles,
     rooms: [...src.rooms],
     fixtures,
+    props,
     doors,
     vanTiles,
     playerSpawn,
@@ -111,6 +123,13 @@ export function roomAt(level: LevelDef, col: number, row: number): RoomDef | und
       col < r.rect.col + r.rect.w &&
       row < r.rect.row + r.rect.h,
   );
+}
+
+/** Light level (0..1) of the room containing a tile. */
+export function lightAt(level: LevelDef, col: number, row: number): number {
+  const room = roomAt(level, col, row);
+  if (!room) return BALANCE.light.fallback;
+  return room.light ?? BALANCE.light.byRoomKind[room.kind];
 }
 
 const NEIGHBORS = [

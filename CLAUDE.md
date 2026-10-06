@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Project Copper is a top-down stealth RPG built with React 19, Phaser 4, Zustand, and TypeScript (Vite).
+Project Copper is a 2.5D stealth RPG built with React 19, Three.js (fixed isometric camera), Zustand, and TypeScript (Vite).
 
 ## Commands
 
@@ -13,10 +13,10 @@ Project Copper is a top-down stealth RPG built with React 19, Phaser 4, Zustand,
 
 `ui → game → state → core`. Imports only point toward `core`.
 
-- `src/core` is pure TypeScript: no Phaser, React, or Zustand. All game rules live here, and `ShiftSession` is the single source of truth for a shift.
+- `src/core` is pure TypeScript: no Three.js, React, or Zustand. All game rules live here, and `ShiftSession` is the single source of truth for a shift.
 - `src/state` holds Zustand stores and may import only `core`.
-- `src/game` holds the Phaser rendering and input. Scenes stay thin: they feed input to the session and draw its state. Don't put rules here.
-- `src/ui` is React. It never imports `phaser`; it mounts `@game/PhaserGame`.
+- `src/game` holds the Three.js rendering and input. `GameEngine` stays thin: it feeds input to the session and draws its state. Don't put rules here (line of sight, cover and light math live in `core/systems`).
+- `src/ui` is React. It never imports `three`; it mounts `@game/GameView`.
 
 ## Conventions
 
@@ -24,6 +24,6 @@ Project Copper is a top-down stealth RPG built with React 19, Phaser 4, Zustand,
 - Balance numbers belong only in `core/content/balance.ts`.
 - New mechanics get unit tests in `core`. The pattern to copy is `ShiftSession.test.ts` driving a tiny ASCII map from `core/test/helpers.ts`.
 - Persisted save changes need a `SAVE_VERSION` bump plus a `migrateCareer` case.
-- Visuals go through `game/render/assetManifest.ts` so placeholder art can be swapped for files.
+- Models are built procedurally in `game/render/models.ts`, keyed by content id, so placeholder art can be swapped for glTF later. Lit materials go through `MaterialKit` so they pick up room light and fog of war.
 - Path aliases: `@core/*`, `@state/*`, `@game/*`, `@ui/*`.
 - `?debug` exposes `window.__copper.session` for e2e tests and manual tinkering.

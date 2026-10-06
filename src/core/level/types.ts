@@ -1,7 +1,7 @@
 import type { TilePos } from '../model/types';
 
-/** Base tile kinds. Fixtures, doors and the van are tracked separately but also occupy tiles. */
-export type TileKind = 'wall' | 'floor' | 'door' | 'lockedDoor' | 'van' | 'fixture';
+/** Base tile kinds. Fixtures, props, doors and the van are tracked separately but also occupy tiles. */
+export type TileKind = 'wall' | 'floor' | 'door' | 'lockedDoor' | 'van' | 'fixture' | 'prop';
 
 export type RoomKind =
   'exterior' | 'hallway' | 'classroom' | 'restroom' | 'closet' | 'lounge' | 'boiler';
@@ -18,9 +18,17 @@ export interface RoomDef {
   name: string;
   kind: RoomKind;
   rect: TileRect;
+  /** 0..1 light level; defaults to BALANCE.light.byRoomKind[kind]. */
+  light?: number;
 }
 
 export interface LevelFixture {
+  id: string;
+  defId: string;
+  tile: TilePos;
+}
+
+export interface LevelProp {
   id: string;
   defId: string;
   tile: TilePos;
@@ -45,6 +53,7 @@ export interface LevelDef {
   tiles: TileKind[];
   rooms: RoomDef[];
   fixtures: LevelFixture[];
+  props: LevelProp[];
   doors: LevelDoor[];
   vanTiles: TilePos[];
   playerSpawn: TilePos;

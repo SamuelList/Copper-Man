@@ -7,6 +7,8 @@ export interface Grid {
   isSolid(col: number, row: number): boolean;
   /** Blocks line of sight. */
   isOpaque(col: number, row: number): boolean;
+  /** Waist-high: hides a crouching target standing right behind it. */
+  isLowCover(col: number, row: number): boolean;
 }
 
 export const inBounds = (grid: Pick<Grid, 'cols' | 'rows'>, col: number, row: number) =>

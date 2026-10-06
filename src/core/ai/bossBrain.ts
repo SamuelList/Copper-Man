@@ -27,8 +27,6 @@ export interface BossState extends Walker {
 
 export interface BossTuning {
   walkSpeed: number;
-  range: number;
-  fillRate: number;
 }
 
 export interface BossContext {
@@ -37,6 +35,8 @@ export interface BossContext {
   route: readonly TilePos[];
   /** Player is visible AND suspicious this frame. */
   sees: boolean;
+  /** Detection meter gain per second while `sees` (zone + light adjusted; see systems/detection). */
+  rate: number;
   playerPos: Vec2;
   /** A student shouted this frame. */
   alert: Vec2 | null;
@@ -107,18 +107,9 @@ export function updateBoss(boss: BossState, ctx: BossContext): BossResult {
   const previousMode = boss.mode;
   const walk = tuning.walkSpeed * ctx.speedMult;
   const turn = NPC.turnRate;
-  const playerDist = dist(boss.pos, ctx.playerPos);
   let caught = false;
 
-  boss.detection = updateDetection(
-    boss.detection,
-    ctx.sees,
-    playerDist,
-    tuning.range,
-    tuning.fillRate,
-    NPC.vision.decayRate,
-    dt,
-  );
+  boss.detection = updateDetection(boss.detection, ctx.sees, ctx.rate, NPC.vision.decayRate, dt);
   if (ctx.sees) boss.lastKnown = { ...ctx.playerPos };
 
   switch (boss.mode) {

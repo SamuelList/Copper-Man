@@ -2,7 +2,7 @@ import { BALANCE } from '../content/balance';
 import type { TileRect } from '../level/types';
 import { tileCenter } from '../level/grid';
 import type { TilePos, Vec2 } from '../model/types';
-import { angleTo, dist, inRange, turnToward } from '../util/math';
+import { angleTo, inRange, turnToward } from '../util/math';
 import type { Rng } from '../util/rng';
 import { followPath, setPathTo, updateDetection, type NavContext, type Walker } from './navigation';
 
@@ -21,8 +21,6 @@ export interface StudentState extends Walker {
 
 export interface StudentTuning {
   walkSpeed: number;
-  range: number;
-  fillRate: number;
 }
 
 export interface StudentContext {
@@ -30,6 +28,8 @@ export interface StudentContext {
   nav: NavContext;
   /** Player is visible AND doing something a student would snitch on. */
   sees: boolean;
+  /** Detection meter gain per second while `sees`. */
+  rate: number;
   playerPos: Vec2;
   rng: Rng;
   tuning: StudentTuning;
@@ -79,9 +79,7 @@ export function updateStudent(student: StudentState, ctx: StudentContext): boole
   student.detection = updateDetection(
     student.detection,
     canNotice,
-    dist(student.pos, ctx.playerPos),
-    tuning.range,
-    tuning.fillRate,
+    ctx.rate,
     NPC.vision.decayRate,
     dt,
   );

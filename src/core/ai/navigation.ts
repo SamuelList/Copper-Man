@@ -77,18 +77,17 @@ export function followPath(
   return pathDone(walker);
 }
 
-/** Detection meter shared by every observer: fills faster up close, decays when unseen. */
+/**
+ * Detection meter shared by every observer: rises at `rate` (see systems/detection) while the
+ * target is in view, decays otherwise.
+ */
 export function updateDetection(
   meter: number,
   sees: boolean,
-  distance: number,
-  range: number,
-  fillRate: number,
+  rate: number,
   decayRate: number,
   dt: number,
 ): number {
-  const next = sees
-    ? meter + fillRate * (1 + Math.max(0, 1 - distance / range)) * dt
-    : meter - decayRate * dt;
+  const next = sees ? meter + rate * dt : meter - decayRate * dt;
   return Math.min(1, Math.max(0, next));
 }

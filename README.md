@@ -1,6 +1,6 @@
 # Project Copper
 
-A top-down **stealth RPG** built with React, Phaser 4, and TypeScript. You work school maintenance: strip copper,
+A 2.5D **stealth RPG** built with React, Three.js, and TypeScript, seen through a fixed axonometric (isometric) camera. You work school maintenance: strip copper,
 brass, aluminum, and steel scrap out of the building, haul it to your van, and sell it. Don't let **Mr. Gravy** (the
 boss) catch you red-handed. Three warnings and you're fired.
 
@@ -28,13 +28,15 @@ npm run dev        # http://localhost:5173
 
 ### Controls
 
-| Key           | Action                                |
-| ------------- | ------------------------------------- |
-| WASD / arrows | Move                                  |
-| Shift         | Sprint (stamina)                      |
-| E / Space     | **Hold** to scrap, unlock, sell, wake |
-| Q             | Character ability                     |
-| Esc           | Pause / clock out early               |
+| Key           | Action                                              |
+| ------------- | --------------------------------------------------- |
+| WASD / arrows | Move (relative to the screen)                       |
+| Shift         | Sprint (stamina)                                    |
+| C             | Crouch / stand (half speed, hides you behind cover) |
+| E / Space     | **Hold** to scrap, unlock, sell, wake               |
+| Q             | Character ability                                   |
+| Mouse wheel   | Zoom                                                |
+| Esc           | Pause / clock out early                             |
 
 ## How it plays
 
@@ -45,12 +47,17 @@ npm run dev        # http://localhost:5173
   - If he catches you: you get a warning, your bag is confiscated, and you're escorted back to the van.
   - If he catches you empty-handed: he tells you to get back to work.
   - He gets faster as the shift goes on and as you sell more.
+- **Line of sight.**
+  - **Fog of war:** you only see what your worker can see. Out-of-sight areas go dark and grey, and NPCs there are hidden. A fading ghost marks where you last saw them, and a pulsing ring shows footsteps you can hear through walls.
+  - **Vision cones** are clipped exactly against walls and tall furniture. The bright inner zone spots you fast; the faint outer zone is slow to notice you.
+  - **Cover:** crouch (C) behind desks, tables, fixtures and benches to break line of sight. Lockers, shelves and boilers block sight entirely.
+  - **Light:** every room has a light level. In the dark (the boiler room, closets) NPCs notice you more slowly and from less far away. The HUD light meter shows how exposed you are.
 - **Students.** They wander their rooms and snitch if they watch you scrap. The boss comes to investigate.
 - **Sleepy coworker.** Asleep somewhere different each shift. Find them to win back a heart.
 - **Map.**
   - Hallways have the high-value fixtures and the boss.
   - Classrooms are safer but cheaper.
-  - The **boiler room** has copper piles behind a locked door, with one way in or out.
+  - The **boiler room** has copper piles behind a locked door, with one way in or out. It's dark, with boilers to hide behind.
 
 | Worker  | Speed | Repair | Carry | Trade    | Ability                                                                  |
 | ------- | ----- | ------ | ----- | -------- | ------------------------------------------------------------------------ |
@@ -62,29 +69,29 @@ npm run dev        # http://localhost:5173
 
 ```
 ui  ──►  game  ──►  state  ──►  core
-React    Phaser     Zustand     pure TypeScript
+React    Three.js   Zustand     pure TypeScript
 ```
 
 Dependencies only point right, and ESLint enforces it (`no-restricted-imports` in `eslint.config.js`).
 
-| Layer           | Responsibility                                                                                                                                                                                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`src/core`**  | Game rules and content, with no Phaser, React, or DOM. `ShiftSession` is the authoritative simulation: it takes `tick(dt, input)`, exposes state to draw, and emits typed events. AI, vision, pathfinding, and collision are plain functions, so they're unit-tested headless. |
-| **`src/state`** | Zustand stores. `careerStore` is persisted to localStorage with a versioned schema and `migrate`. `shiftStore` is the HUD mirror. `appStore` is the screen state machine.                                                                                                      |
-| **`src/game`**  | Phaser renderer and input. `ShiftScene` steps the session on a fixed 60 Hz timestep and draws it. `bridge.ts` pushes session events and throttled snapshots into `shiftStore`.                                                                                                 |
-| **`src/ui`**    | React screens and HUD. It mounts `<PhaserGame />` and never imports Phaser directly. HUD widgets subscribe to narrow slices of the store with `useShallow`.                                                                                                                    |
+| Layer           | Responsibility                                                                                                                                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`src/core`**  | Game rules and content, with no Three.js, React, or DOM. `ShiftSession` is the authoritative simulation: it takes `tick(dt, input)`, exposes state to draw, and emits typed events. AI, vision (exact visibility outlines, cover, light), pathfinding, and collision are plain functions, so they're unit-tested headless.                  |
+| **`src/state`** | Zustand stores. `careerStore` is persisted to localStorage with a versioned schema and `migrate`. `shiftStore` is the HUD mirror. `appStore` is the screen state machine.                                                                                                                                                                   |
+| **`src/game`**  | Three.js renderer and input. `GameEngine` steps the session on a fixed 60 Hz timestep and draws it with a fixed isometric `IsoCamera`. Room light and fog of war are map-space textures applied to every material by one shader patch (`render/materials.ts`). `bridge.ts` pushes session events and throttled snapshots into `shiftStore`. |
+| **`src/ui`**    | React screens and HUD. It mounts `<GameView />` and never imports Three.js directly. HUD widgets subscribe to narrow slices of the store with `useShallow`.                                                                                                                                                                                 |
 
 ```
 src/
   core/
-    content/   characters, fixtures, metals, upgrades, abilities, npcs, balance (all tunables)
+    content/   characters, fixtures, props, metals, upgrades, abilities, npcs, balance (all tunables)
     model/     shared types
-    systems/   stats, scrapping, bag, economy, warnings, escalation, shop, vision, pathfinding, movement
+    systems/   stats, scrapping, bag, economy, warnings, escalation, shop, vision, detection, pathfinding, movement
     ai/        bossBrain, studentBrain, navigation
     level/     ASCII level format + validator, levels/ (school map)
     session/   ShiftSession + types
   state/       careerStore, shiftStore, appStore, messages (event → toast copy)
-  game/        PhaserGame.tsx, createGame, scenes/, entities/ (views), render/ (textures, tilemap), input/, bridge
+  game/        GameView.tsx, GameEngine, render/ (camera, world, models, materials, fog, cones, markers), input/, bridge
   ui/          App, screens/, hud/, components/
 e2e/           Playwright tests
 ```
@@ -93,11 +100,12 @@ e2e/           Playwright tests
 
 | To add…         | Do this                                                                                                                                                                                                                                |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A fixture       | Add an entry to `core/content/fixtures.ts` with a unique `glyph`, then place that glyph in a map. Optionally add a drawer in `game/render/textures.ts`; there's a generic fallback.                                                    |
+| A fixture       | Add an entry to `core/content/fixtures.ts` with a unique `glyph` and its `cover`, then place that glyph in a map. Add a model builder to `FIXTURE_MODELS` in `game/render/models.ts`.                                                  |
+| Furniture       | Add to `core/content/props.ts` (`height: 'tall'` blocks sight, `'low'` is cover) and a builder to `PROP_MODELS`.                                                                                                                       |
 | A worker        | Add to `core/content/characters.ts`. For a new ability, add a strategy object to `core/content/abilities.ts`. `conceals(signal, active)` decides what NPCs can't notice.                                                               |
 | An upgrade      | Add a tier to `core/content/upgrades.ts`. The shop UI picks it up automatically.                                                                                                                                                       |
 | A level         | Write a map in `core/level/levels/` (legend in `asciiLevel.ts`) and register it in `levels/index.ts`. `validateLevel` runs in tests and catches unreachable fixtures or broken patrols. A Tiled loader can return the same `LevelDef`. |
-| Real art        | Give the entry in `game/render/assetManifest.ts` a `url`. BootScene loads it instead of generating a placeholder.                                                                                                                      |
+| Real art        | Swap a builder in `game/render/models.ts` for one that clones a loaded glTF scene. Every model is looked up by content id.                                                                                                             |
 | A save field    | Add it to `CareerData`, bump `SAVE_VERSION`, and add a `case` to `migrateCareer`.                                                                                                                                                      |
 | Balance changes | Everything numeric lives in `core/content/balance.ts`.                                                                                                                                                                                 |
 

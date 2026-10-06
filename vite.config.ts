@@ -18,12 +18,12 @@ export default defineConfig({
     },
   },
   build: {
-    // Phaser is large; keep it in its own long-cacheable chunk.
-    chunkSizeWarningLimit: 2000,
+    // Three.js is the bulk of the bundle; keep it in its own long-cacheable chunk.
+    chunkSizeWarningLimit: 1000,
     rolldownOptions: {
       output: {
         codeSplitting: {
-          groups: [{ name: 'phaser', test: /node_modules[\\/]phaser/ }],
+          groups: [{ name: 'three', test: /node_modules[\\/]three/ }],
         },
       },
     },

@@ -45,7 +45,12 @@ export function TitleScreen() {
           </li>
           <li>
             <strong>Stay out of sight.</strong> {NPCS.boss.name} only cares if you&apos;re carrying
-            or scrapping. Students snitch if they watch you scrap.
+            or scrapping. Students snitch if they watch you scrap. You only see what your worker can
+            see, so listen for footsteps.
+          </li>
+          <li>
+            <strong>Use the dark and the furniture.</strong> Dark rooms make you harder to spot.
+            Press <strong>C</strong> to crouch behind desks, tables and fixtures.
           </li>
           <li>
             <strong>{BALANCE.warnings.max} warnings and you&apos;re fired.</strong> Find your sleepy
