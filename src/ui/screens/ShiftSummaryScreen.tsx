@@ -44,6 +44,14 @@ export function ShiftSummaryScreen() {
           <dd>{s.timesCaught}</dd>
           <dt>Coworker found</dt>
           <dd>{s.coworkerFound ? 'Yes' : 'No'}</dd>
+          <dt>School explored</dt>
+          <dd data-testid="explored">{Math.round(s.exploredFraction * 100)}%</dd>
+          {s.roomsDiscovered.length > 0 && (
+            <>
+              <dt>New rooms</dt>
+              <dd className={styles.wrapValue}>{s.roomsDiscovered.join(', ')}</dd>
+            </>
+          )}
           <dt>Hearts left</dt>
           <dd>
             <Hearts warnings={warnings} max={maxHearts} />

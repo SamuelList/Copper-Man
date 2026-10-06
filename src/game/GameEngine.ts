@@ -3,6 +3,7 @@ import { CHARACTERS } from '@core/content/characters';
 import { ShiftSession } from '@core/session/ShiftSession';
 import type { ShiftConfig, ShiftSummary } from '@core/session/types';
 import { bagTotal } from '@core/systems/bag';
+import { bossLine } from '@state/messages';
 import { useShiftStore } from '@state/shiftStore';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -14,15 +15,25 @@ import {
   StatusIcon,
   type ActorPose,
   type Footfall,
+  type IconKind,
 } from './render/actors';
 import { toWorld } from './render/coords';
 import { FogOfWar } from './render/fogOfWar';
 import { IsoCamera } from './render/isoCamera';
-import { Dial, DustPuffs, floorRing, PopFx, Sparks, textSprite } from './render/markers';
+import {
+  Dial,
+  DustPuffs,
+  floorRing,
+  PopFx,
+  Sparks,
+  SpeechBubble,
+  textSprite,
+} from './render/markers';
 import { createWorldShading, MaterialKit } from './render/materials';
 import {
   buildBoss,
   buildStudent,
+  buildTeacher,
   buildWorker,
   disposeModelCache,
   disposeTextureCache,
@@ -50,6 +61,7 @@ interface NpcViews {
   ghost: LastSeenGhost;
   cone: VisionCone;
   heard: THREE.Mesh;
+  bubble: SpeechBubble;
 }
 
 /** `?debug` exposes the live session on `window.__copper` for e2e tests and tinkering. */
@@ -73,6 +85,9 @@ export class GameEngine {
   private readonly player: ActorView;
   private readonly boss: NpcViews;
   private readonly students: NpcViews[];
+  private readonly teachers: NpcViews[];
+  /** Cycles through each speaker's lines so they don't repeat the same one. */
+  private remarks = 0;
   private readonly focusRing = floorRing(0.5, 0.6, PALETTE.focus);
   private readonly progress = new Dial('#ffb74d');
   private readonly recharge = new Map<string, Dial>();
@@ -121,7 +136,7 @@ export class GameEngine {
     const shading = createWorldShading(level.cols, level.rows);
     this.kit = new MaterialKit(shading);
     this.world = buildWorld(this.scene, this.session, this.kit);
-    this.fog = new FogOfWar(level.cols, level.rows);
+    this.fog = new FogOfWar(level.cols, level.rows, this.session.explored);
     shading.uLightMap.value = this.world.lightMap;
     shading.uFogMap.value = this.fog.texture;
 
@@ -132,14 +147,21 @@ export class GameEngine {
       PALETTE.ghostBoss,
       1.25,
     );
-    this.students = this.session.students.map((_, i) =>
+    this.students = this.session.students.map((st, i) =>
       this.npcViews(
         new ActorView(
-          buildStudent(this.kit, STUDENT_SHIRTS[i % STUDENT_SHIRTS.length]!),
+          buildStudent(this.kit, STUDENT_SHIRTS[i % STUDENT_SHIRTS.length]!, st.personality.look),
           this.scene,
         ),
         PALETTE.ghostStudent,
         0.85,
+      ),
+    );
+    this.teachers = this.session.teachers.map((t) =>
+      this.npcViews(
+        new ActorView(buildTeacher(this.kit, t.def), this.scene),
+        PALETTE.ghostTeacher,
+        1.2,
       ),
     );
 
@@ -152,6 +174,7 @@ export class GameEngine {
       this.pops.group,
     );
     this.listenForGadgets();
+    this.listenForSpeech();
 
     this.bridge = connectSession(this.session, (summary) => {
       this.endTimer = window.setTimeout(() => params.onEnd(summary), END_DELAY_MS);
@@ -182,14 +205,42 @@ export class GameEngine {
     const cone = new VisionCone();
     this.scene.add(cone.group);
     const heard = floorRing(0.35, 0.45, ghostColor, true);
-    this.scene.add(heard);
+    const bubble = new SpeechBubble();
+    this.scene.add(heard, bubble.sprite);
     return {
       actor,
       icon: new StatusIcon(this.scene),
       ghost: new LastSeenGhost(this.scene, ghostColor, height),
       cone,
       heard,
+      bubble,
     };
+  }
+
+  /** Speech bubbles: Mr. Gravy thinking out loud, teachers on the radio, students tattling. */
+  private listenForSpeech() {
+    const events = this.session.events;
+    const n = () => this.remarks++;
+    events.on('boss:remark', ({ remark, detail }) => {
+      this.boss.bubble.say(
+        bossLine(remark, detail, n()),
+        remark === 'spotted' ? '#c62828' : undefined,
+      );
+    });
+    events.on('teacher:report', ({ teacherId }) => {
+      const i = this.session.teachers.findIndex((t) => t.id === teacherId);
+      const lines = ['Mr. Gravy! Come quick!', 'I see you!', 'Stay right there!'];
+      this.teachers[i]?.bubble.say(lines[n() % lines.length]!, '#6a1b9a');
+    });
+    events.on('student:alert', ({ studentId }) => {
+      const i = this.session.students.findIndex((st) => st.id === studentId);
+      const lines = ['MR. GRAVYYY!', "I'm telling!", 'Ooooh, busted!'];
+      this.students[i]?.bubble.say(lines[n() % lines.length]!, '#c62828');
+    });
+    events.on('student:laughed', ({ studentId }) => {
+      const i = this.session.students.findIndex((st) => st.id === studentId);
+      this.students[i]?.bubble.say('HA HA HA!', '#ef6c00');
+    });
   }
 
   /** Comic feedback for gadgets: a "PFFT!" where the cushion lands, a "GLUG!", a "SNIP!". */
@@ -291,8 +342,8 @@ export class GameEngine {
 
     // NPCs: hidden by the fog of war unless in your line of sight.
     const boss = s.boss;
-    const bossIcon =
-      boss.mode === 'chase' ? '!' : boss.mode === 'patrol' || boss.mode === 'return' ? '' : '?';
+    const bossIcon: IconKind =
+      boss.mode === 'chase' ? '!' : boss.mode === 'patrol' || boss.mode === 'inspect' ? '' : '?';
     this.syncNpc(
       this.boss,
       { pos: boss.pos, facing: boss.facing, running: boss.mode === 'chase' },
@@ -304,15 +355,32 @@ export class GameEngine {
       time,
     );
     s.students.forEach((st, i) => {
-      const icon = st.mode === 'alarmed' ? '!' : st.detection > 0.05 ? '?' : '';
+      const asleep = st.mode === 'asleep';
+      const icon: IconKind =
+        st.mode === 'alarmed' ? '!' : asleep ? 'z' : st.detection > 0.05 ? '?' : '';
       const color = st.mode === 'alarmed' ? PALETTE.coneChase : PALETTE.coneStudent;
       this.syncNpc(
         this.students[i]!,
-        { pos: st.pos, facing: st.facing },
+        { pos: st.pos, facing: st.facing, crouching: asleep },
         s.studentCone(st),
         color,
         icon,
         1.1,
+        dt,
+        time,
+      );
+    });
+    s.teachers.forEach((t, i) => {
+      const icon: IconKind =
+        t.mode === 'confront' ? '!' : t.mode === 'suspicious' || t.detection > 0.05 ? '?' : '';
+      const color = t.mode === 'confront' ? PALETTE.coneChase : PALETTE.coneTeacher;
+      this.syncNpc(
+        this.teachers[i]!,
+        { pos: t.pos, facing: t.facing },
+        s.teacherCone(t),
+        color,
+        icon,
+        1.5,
         dt,
         time,
       );
@@ -396,7 +464,7 @@ export class GameEngine {
     pose: ActorPose,
     cone: Parameters<VisionCone['update']>[2],
     coneColor: number,
-    icon: '' | '!' | '?',
+    icon: IconKind,
     iconHeight: number,
     dt: number,
     time: number,
@@ -406,8 +474,16 @@ export class GameEngine {
     const footfalls = v.actor.sync(pose, dt);
     if (visible) this.kickUpDust(footfalls);
     v.actor.root.visible = visible;
-    v.cone.group.visible = visible;
-    if (visible) v.cone.update(s.grid, s.grid.sightCorners, cone, coneColor, 1);
+    v.cone.group.visible = visible && cone.range > 0;
+    if (visible && cone.range > 0) v.cone.update(s.grid, s.grid.sightCorners, cone, coneColor, 1);
+    // You hear what they say if you can see them or they're close enough to hear.
+    v.bubble.update(
+      toWorld(pose.pos.x),
+      iconHeight + 0.45,
+      toWorld(pose.pos.y),
+      dt,
+      visible || s.canHear(pose.pos),
+    );
     v.icon.sync(pose.pos, icon, iconHeight, time, visible || icon === '!');
     v.ghost.sync(pose.pos, visible, dt);
 

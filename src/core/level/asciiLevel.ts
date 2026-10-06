@@ -9,11 +9,12 @@ import type { LevelDef, LevelDoor, LevelFixture, LevelProp, RoomDef, TileKind } 
  * ASCII level format.
  *
  *   #  wall              .  floor            =  outdoor floor (rendered by room kind)
- *   D  open doorway      L  locked door      V  van (deposit point)
- *   P  player spawn      S  student spawn    Z  sleepy-coworker hiding spot
+ *   D  open doorway      L  locked door      K  security door (Master Key or bolt cutters)
+ *   V  van (deposit)     P  player spawn     S  student spawn     E  teacher spawn
+ *   Z  sleepy-coworker hiding spot
  *   1-9  boss patrol waypoint markers (ordered by `bossRoute`)
  *   any fixture glyph from FIXTURES (C F H A R T M l k …) — scrappable
- *   any prop glyph from PROPS (O B h t b p …) — furniture: tall blocks sight, low is cover
+ *   any prop glyph from PROPS (O B h t b p q n r c …) — furniture: tall blocks sight, low is cover
  */
 export interface AsciiLevelSource {
   id: string;
@@ -39,6 +40,7 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
   const doors: LevelDoor[] = [];
   const vanTiles: TilePos[] = [];
   const studentSpawns: TilePos[] = [];
+  const teacherSpawns: TilePos[] = [];
   const coworkerSpots: TilePos[] = [];
   const markers = new Map<string, TilePos>();
   let playerSpawn: TilePos | null = null;
@@ -55,11 +57,15 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
       } else if (ch === 'L') {
         kind = 'lockedDoor';
         doors.push({ id: `door-${col}-${row}`, tile, locked: true });
+      } else if (ch === 'K') {
+        kind = 'lockedDoor';
+        doors.push({ id: `door-${col}-${row}`, tile, locked: true, security: true });
       } else if (ch === 'V') {
         kind = 'van';
         vanTiles.push(tile);
       } else if (ch === 'P') playerSpawn = tile;
       else if (ch === 'S') studentSpawns.push(tile);
+      else if (ch === 'E') teacherSpawns.push(tile);
       else if (ch === 'Z') coworkerSpots.push(tile);
       else if (/[1-9]/.test(ch)) {
         if (markers.has(ch)) throw new Error(`Level "${src.id}" has duplicate marker "${ch}"`);
@@ -102,6 +108,7 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
     playerSpawn,
     bossRoute,
     studentSpawns,
+    teacherSpawns,
     coworkerSpots,
   };
 }
@@ -174,9 +181,9 @@ export function validateLevel(level: LevelDef): string[] {
     const next = level.bossRoute[(i + 1) % level.bossRoute.length]!;
     if (!reachable(wp, next)) errors.push(`Boss waypoint ${i} cannot reach waypoint ${i + 1}.`);
   });
-  for (const s of level.studentSpawns) {
+  for (const s of [...level.studentSpawns, ...level.teacherSpawns]) {
     if (!roomAt(level, s.col, s.row))
-      errors.push(`Student spawn ${s.col},${s.row} is outside any room.`);
+      errors.push(`NPC spawn ${s.col},${s.row} is outside any room.`);
   }
   for (const z of level.coworkerSpots) {
     if (!reachable(level.playerSpawn, z))

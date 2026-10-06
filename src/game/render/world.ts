@@ -264,7 +264,7 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
   const doors: DoorView[] = session.doors
     .filter((d) => d.locked)
     .map((d) => {
-      const { root, leaf } = buildLockedDoor(kit);
+      const { root, leaf } = buildLockedDoor(kit, d.security);
       root.position.set(d.tile.col + 0.5, 0, d.tile.row + 0.5);
       const wallsLeftRight =
         tileAt(level, d.tile.col - 1, d.tile.row) === 'wall' &&
@@ -486,7 +486,36 @@ function hangDecor(level: LevelDef, walls: WallCutaway, kit: MaterialKit, scene:
         });
         break;
       case 'boiler':
+      case 'mechanical':
         north.forEach(([c, r], i) => i % 4 === 1 && hang(DECOR.warning!(kit, 0), c, r, 'south'));
+        break;
+      case 'office':
+        north.forEach(([c, r], i) => {
+          if (i === 3) hang(DECOR.portrait!(kit, 0), c, r, 'south');
+          else if (i === 6) hang(DECOR.clock!(kit, 0), c, r, 'south');
+        });
+        break;
+      case 'library':
+        north.forEach(([c, r], i) => i % 3 === 1 && hang(DECOR.poster!(kit, 0), c, r, 'south'));
+        east.forEach(([c, r], i) => i % 3 === 1 && hang(DECOR.clock!(kit, 0), c, r, 'west'));
+        break;
+      case 'lab':
+        north.forEach(([c, r], i) => {
+          if (i === 4) hang(DECOR.periodic!(kit, 0), c, r, 'south');
+          else if (i % 5 === 1) hang(DECOR.poster!(kit, v(c, r)), c, r, 'south');
+        });
+        break;
+      case 'gym':
+        north.forEach(
+          ([c, r], i) => i % 3 === 0 && hang(DECOR.banner!(kit, v(c, r)), c, r, 'south'),
+        );
+        east.forEach(([c, r], i) => i % 5 === 2 && hang(DECOR.clock!(kit, 0), c, r, 'west'));
+        break;
+      case 'cafeteria':
+        north.forEach(([c, r], i) => {
+          if (i === 7) hang(DECOR.menu!(kit, 0), c, r, 'south');
+          else if (i % 4 === 1) hang(DECOR.poster!(kit, v(c, r)), c, r, 'south');
+        });
         break;
     }
   }

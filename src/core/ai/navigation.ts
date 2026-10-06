@@ -18,9 +18,33 @@ export interface Walker {
   pathIndex: number;
 }
 
+/**
+ * The walkable tile nearest to `goal` (itself if walkable). NPCs can't stand inside a fixture's
+ * tile, but they can walk right up to it.
+ */
+export function walkableNear(nav: NavContext, goal: TilePos, radius = 2): TilePos | null {
+  if (nav.passable(goal.col, goal.row)) return goal;
+  let best: TilePos | null = null;
+  let bestD = Infinity;
+  for (let dr = -radius; dr <= radius; dr++) {
+    for (let dc = -radius; dc <= radius; dc++) {
+      const c = goal.col + dc;
+      const r = goal.row + dr;
+      if (c < 0 || r < 0 || c >= nav.cols || r >= nav.rows || !nav.passable(c, r)) continue;
+      const d = dc * dc + dr * dr;
+      if (d < bestD) {
+        bestD = d;
+        best = { col: c, row: r };
+      }
+    }
+  }
+  return best;
+}
+
 export function setPathTo(walker: Walker, nav: NavContext, goal: TilePos): boolean {
   const start = worldToTile(nav.tileSize, walker.pos.x, walker.pos.y);
-  const path = findPath(nav.cols, nav.rows, nav.passable, start, goal);
+  const target = walkableNear(nav, goal);
+  const path = target ? findPath(nav.cols, nav.rows, nav.passable, start, target) : null;
   walker.path = path ?? [];
   walker.pathIndex = 0;
   return path !== null;

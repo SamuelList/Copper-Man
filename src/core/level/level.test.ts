@@ -1,5 +1,7 @@
 import { testLevel } from '../test/helpers';
 import { lightAt, parseAsciiLevel, roomAt, tileAt, validateLevel } from './asciiLevel';
+import { FIXTURES } from '../content/fixtures';
+import { PROPS } from '../content/props';
 import { SCHOOL_LEVEL } from './levels/school';
 
 describe('ASCII level parser', () => {
@@ -93,8 +95,46 @@ describe('school level', () => {
     expect(kinds.has('boiler')).toBe(true);
   });
 
-  it('keeps every fixture type in play', () => {
+  it('keeps every fixture type and prop in play', () => {
     const used = new Set(SCHOOL_LEVEL.fixtures.map((f) => f.defId));
-    expect(used.size).toBeGreaterThanOrEqual(9);
+    expect([...used].sort()).toEqual(FIXTURES.all.map((f) => f.id).sort());
+    const props = new Set(SCHOOL_LEVEL.props.map((p) => p.defId));
+    expect([...props].sort()).toEqual(PROPS.all.map((p) => p.id).sort());
+  });
+
+  it('is about twice the size of the first school', () => {
+    expect(SCHOOL_LEVEL.cols * SCHOOL_LEVEL.rows).toBeGreaterThanOrEqual(1980 * 2);
+    expect(SCHOOL_LEVEL.teacherSpawns.length).toBeGreaterThanOrEqual(5);
+    expect(SCHOOL_LEVEL.studentSpawns.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it('puts the hardest prizes far from the van, behind security doors', () => {
+    const van = SCHOOL_LEVEL.vanTiles[0]!;
+    const roomOf = (f: { tile: { col: number; row: number } }) =>
+      roomAt(SCHOOL_LEVEL, f.tile.col, f.tile.row)!.id;
+    const chillers = SCHOOL_LEVEL.fixtures.filter((f) => f.defId === 'chiller');
+    const desks = SCHOOL_LEVEL.fixtures.filter((f) => f.defId === 'desk');
+    const avgDistance = (list: { tile: { col: number } }[]) =>
+      list.reduce((sum, f) => sum + (f.tile.col - van.col), 0) / list.length;
+    expect(avgDistance(chillers)).toBeGreaterThan(avgDistance(desks) * 2);
+    for (const id of new Set(chillers.map(roomOf))) {
+      const room = SCHOOL_LEVEL.rooms.find((r) => r.id === id)!;
+      const doors = SCHOOL_LEVEL.doors.filter(
+        (d) =>
+          d.tile.col >= room.rect.col - 1 &&
+          d.tile.col <= room.rect.col + room.rect.w &&
+          d.tile.row >= room.rect.row - 1 &&
+          d.tile.row <= room.rect.row + room.rect.h,
+      );
+      expect(doors.every((d) => d.security)).toBe(true);
+    }
+  });
+
+  it('kits out the restrooms', () => {
+    const inRestrooms = SCHOOL_LEVEL.fixtures
+      .filter((f) => roomAt(SCHOOL_LEVEL, f.tile.col, f.tile.row)?.kind === 'restroom')
+      .map((f) => f.defId);
+    for (const id of ['toilet', 'urinal', 'sink', 'hand-dryer']) expect(inRestrooms).toContain(id);
+    expect(SCHOOL_LEVEL.props.some((p) => p.defId === 'stall')).toBe(true);
   });
 });

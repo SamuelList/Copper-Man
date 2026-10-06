@@ -11,7 +11,8 @@
  */
 export * from './characters';
 export { DECOR, chalkboardSlice, type DecorBuilder } from './decor';
-export { FIXTURE_MODELS, type ModelBuilder } from './fixtures';
+export type { ModelBuilder } from './common';
+export { FIXTURE_MODELS } from './fixtures';
 export { disposeModelCache, disposeTextureCache } from './parts';
 export { fireMaterial, PROP_MODELS } from './props';
 export {

@@ -16,8 +16,16 @@
     repeating-linear-gradient(45deg, #ffffff04 0 12px, transparent 12px 24px), var(--bg);
 }
 
-.center {
-  justify-content: center;
+/*
+ * Vertically centre when there's room, but never push content above the scroll area when the
+ * screen is too short (plain justify-content: center clips the top on landscape phones).
+ */
+.center > :first-child {
+  margin-top: auto;
+}
+
+.center > :last-child {
+  margin-bottom: auto;
 }
 
 .title {
@@ -624,4 +632,11 @@
   .clockIn {
     min-height: 44px;
   }
+}
+
+.statsGrid .wrapValue {
+  max-width: 14rem;
+  white-space: normal;
+  font-weight: 600;
+  font-size: 0.9rem;
 }

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import type { PersonalityDef, TeacherDef } from '@core/model/types';
 import type { MaterialKit } from '../materials';
 import { PALETTE } from '../palette';
-import { box, capsule, cyl, part, sphere } from './parts';
+import { box, capsule, cyl, part, sphere, torus } from './parts';
 
 // ---------------------------------------------------------------------------------------------
 // People
@@ -51,6 +52,13 @@ export interface RigSpec {
   tie?: number;
   backpack?: number;
   sack?: boolean;
+  /** Diagonal sash across the chest (hall monitor). */
+  sash?: number;
+  glasses?: boolean;
+  /** Glowing phone held in front of the chest. */
+  phone?: boolean;
+  /** Propeller on top of the cap. */
+  propeller?: boolean;
   /** Give every mesh its own material (so the player can fade without touching NPCs). */
   unique?: boolean;
 }
@@ -104,6 +112,23 @@ export function buildCharacter(kit: MaterialKit, spec: RigSpec): CharacterModel 
     part(box(0.04, 0.2, 0.17), m(PALETTE.shirt), spec.build * 0.84, 0.27, 0, torso);
     part(box(0.035, 0.19, 0.055), m(spec.tie), spec.build * 0.86 + 0.01, 0.24, 0, torso);
   }
+  if (spec.sash !== undefined) {
+    const sash = part(box(0.05, 0.42, 0.05), m(spec.sash), spec.build * 0.9, 0.22, 0, torso);
+    sash.rotation.x = 0.75;
+    part(box(0.03, 0.06, 0.06), m(0xffeb3b), spec.build * 0.95 + 0.01, 0.26, 0.04, torso);
+  }
+  if (spec.phone) {
+    // Held up at chest height, screen glowing on their face.
+    part(box(0.05, 0.11, 0.07), m(0x212121), spec.build + 0.07, 0.24, 0.02, torso);
+    part(
+      box(0.012, 0.09, 0.055),
+      kit.get(0x81d4fa, { emissive: 0x4fc3f7 }),
+      spec.build + 0.045,
+      0.24,
+      0.02,
+      torso,
+    );
+  }
   if (spec.backpack !== undefined) {
     part(box(0.12, 0.24, 0.24), m(spec.backpack), -spec.build - 0.03, 0.22, 0, torso);
   }
@@ -151,6 +176,22 @@ export function buildCharacter(kit: MaterialKit, spec: RigSpec): CharacterModel 
     const capMat = m(spec.cap);
     part(cyl(0.135, 0.14, 0.07), capMat, 0, 0.2, 0, head);
     part(box(0.11, 0.022, 0.18), capMat, 0.14, 0.175, 0, head);
+    if (spec.propeller) {
+      part(cyl(0.012, 0.012, 0.06), m(0x9e9e9e), 0, 0.26, 0, head);
+      for (const [c, a] of [
+        [0xef5350, 0],
+        [0x42a5f5, Math.PI / 2],
+      ] as const) {
+        part(box(0.2, 0.01, 0.04), m(c), 0, 0.29, 0, head).rotation.y = a;
+      }
+    }
+  }
+  if (spec.glasses) {
+    const frame = m(0x212121);
+    for (const z of [-0.045, 0.045]) {
+      part(torus(0.03, 0.007, 4, 10), frame, 0.125, 0.12, z, head).rotation.y = Math.PI / 2;
+    }
+    part(box(0.01, 0.01, 0.03), frame, 0.13, 0.12, 0, head);
   }
 
   return {
@@ -204,14 +245,37 @@ export const buildBoss = (kit: MaterialKit) =>
     tie: PALETTE.bossTie,
   });
 
-export const buildStudent = (kit: MaterialKit, shirt: number) =>
+/** A student whose look gives away their personality (see core/content/npcs). */
+export const buildStudent = (kit: MaterialKit, shirt: number, look: PersonalityDef['look']) =>
   buildCharacter(kit, {
     scale: 0.78,
-    skin: PALETTE.skin,
-    shirt,
+    skin: look === 'sleepy' ? 0xe6b98a : PALETTE.skin,
+    shirt: look === 'glasses' ? 0x8d6e63 : shirt,
     pants: 0x3d5a80,
     shoes: 0xeeeeee,
     build: 0.14,
-    hair: 0x4e342e,
-    backpack: 0x5c6bc0,
+    hair: look === 'propeller' ? undefined : 0x4e342e,
+    backpack: look === 'phone' || look === 'sleepy' ? undefined : 0x5c6bc0,
+    sash: look === 'sash' ? 0xff9800 : undefined,
+    phone: look === 'phone',
+    cap: look === 'propeller' ? 0xffca28 : undefined,
+    propeller: look === 'propeller',
+    glasses: look === 'glasses',
+    vest: false,
+  });
+
+/** A teacher, dressed per their content outfit. */
+export const buildTeacher = (kit: MaterialKit, def: TeacherDef) =>
+  buildCharacter(kit, {
+    scale: 1,
+    skin: PALETTE.skin,
+    shirt: def.outfit.shirt,
+    pants: def.outfit.pants,
+    shoes: 0x3e2723,
+    build: 0.16,
+    hair: def.outfit.hair,
+    bald: def.outfit.bald,
+    cap: def.outfit.cap,
+    tie: def.outfit.tie,
+    glasses: def.outfit.glasses,
   });

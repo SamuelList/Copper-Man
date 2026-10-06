@@ -90,6 +90,7 @@ describe('ShiftSummaryScreen', () => {
       skillPoints: 1,
       lastLevelsGained: 1,
       lastSummary: {
+        levelId: 'school',
         day: 1,
         endedBy: 'time',
         fired: false,
@@ -108,10 +109,15 @@ describe('ShiftSummaryScreen', () => {
         ],
         xpTotal: 41,
         inventory: {},
+        explored: '',
+        exploredFraction: 0.23,
+        roomsDiscovered: ['Gymnasium', 'Kitchen'],
       },
     });
     render(<ShiftSummaryScreen />);
     expect(screen.getByTestId('xp-total')).toHaveTextContent('+41 XP');
+    expect(screen.getByTestId('explored')).toHaveTextContent('23%');
+    expect(screen.getByText('Gymnasium, Kitchen')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Level up! Level 2');
     expect(screen.getByRole('button', { name: /Spend skill points/ })).toBeInTheDocument();
   });
@@ -185,6 +191,7 @@ describe('Hud', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Sold 1.00 scrap');
     act(() =>
       useShiftStore.getState().setResult({
+        levelId: 'school',
         day: 2,
         endedBy: 'fired',
         fired: true,
@@ -200,6 +207,9 @@ describe('Hud', () => {
         xp: [],
         xpTotal: 0,
         inventory: {},
+        explored: '',
+        exploredFraction: 0,
+        roomsDiscovered: [],
       }),
     );
     expect(screen.getByTestId('end-banner')).toHaveTextContent("YOU'RE FIRED!");

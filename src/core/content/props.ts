@@ -54,6 +54,39 @@ export const PROPS = createRegistry<PropDef>('prop', [
     footprint: { w: 0.7, d: 0.7, anchor: 'center' },
     color: 0x4f7a3a,
   },
+  {
+    id: 'stall',
+    name: 'Stall Divider',
+    glyph: 'q',
+    height: 'tall',
+    // A thin panel standing out from the wall between two toilets.
+    footprint: { w: 0.08, d: 0.95, anchor: 'wall' },
+    color: 0x7e9aa6,
+  },
+  {
+    id: 'trash-can',
+    name: 'Trash Can',
+    glyph: 'n',
+    height: 'low',
+    footprint: { w: 0.45, d: 0.45, anchor: 'center' },
+    color: 0x546e7a,
+  },
+  {
+    id: 'bookshelf',
+    name: 'Bookshelf',
+    glyph: 'r',
+    height: 'tall',
+    footprint: { w: 0.96, d: 0.42, anchor: 'wall' },
+    color: 0x8d6240,
+  },
+  {
+    id: 'counter',
+    name: 'Counter',
+    glyph: 'c',
+    height: 'low',
+    footprint: { w: 0.98, d: 0.62, anchor: 'wall' },
+    color: 0xb0bec5,
+  },
 ]);
 
 export const propByGlyph = (glyph: string) => PROPS.all.find((p) => p.glyph === glyph);

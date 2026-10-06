@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { MaterialKit } from '../materials';
-import { metals } from './fixtures';
+import { metals } from './common';
 import { box, canvasTexture, disc, geo, part, pick, plane, rbox, torus } from './parts';
 
 /**
@@ -232,7 +232,7 @@ export const DECOR: Record<string, DecorBuilder> = {
     part(rbox(0.62, 0.74, 0.03, 0.015), chrome, 0, 1.05, 0.015, g);
     part(
       plane(0.56, 0.68),
-      kit.get(0xdfe8ee, { roughness: 0.02, metalness: 1 }),
+      kit.get(0xcfe3ee, { roughness: 0.08, metalness: 0.6, emissive: 0x1d2a33 }),
       0,
       1.05,
       0.032,
@@ -263,6 +263,144 @@ export const DECOR: Record<string, DecorBuilder> = {
       0,
       1.25,
       0.012,
+      g,
+    ).castShadow = false;
+    return g;
+  },
+
+  /** Gym pennant banner. */
+  banner: (kit, v) => {
+    const g = new THREE.Group();
+    const i = Math.floor(v * 3) % 3;
+    const tex = canvasTexture(`banner:${i}`, 64, 128, (ctx) => {
+      const [bg, text] = [
+        ['#c62828', 'LIONS'],
+        ['#1565c0', 'GO!'],
+        ['#f9a825', '#1'],
+      ][i]!;
+      ctx.fillStyle = bg!;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(64, 0);
+      ctx.lineTo(64, 100);
+      ctx.lineTo(32, 128);
+      ctx.lineTo(0, 100);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 18px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.save();
+      ctx.translate(32, 60);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(text!, 0, 6);
+      ctx.restore();
+    });
+    const b = part(
+      plane(0.34, 0.68),
+      kit.get(0xffffff, { map: tex, opacity: 0.999, roughness: 0.9 }),
+      0,
+      1.15,
+      0.012,
+      g,
+    );
+    b.castShadow = false;
+    part(box(0.4, 0.02, 0.02), kit.get(0x5d4037), 0, 1.5, 0.012, g);
+    return g;
+  },
+
+  /** Cafeteria menu board. */
+  menu: (kit) => {
+    const g = new THREE.Group();
+    const tex = canvasTexture('menu', 128, 96, (ctx) => {
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(0, 0, 128, 96);
+      ctx.fillStyle = '#ffeb3b';
+      ctx.font = 'bold 16px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText("TODAY'S LUNCH", 64, 20);
+      ctx.fillStyle = '#fff';
+      ctx.font = '13px system-ui, sans-serif';
+      ctx.fillText('Mystery Meat', 64, 44);
+      ctx.fillText('Tater Tots', 64, 62);
+      ctx.fillText('Chocolate Milk', 64, 80);
+    });
+    part(rbox(0.82, 0.62, 0.03, 0.01), kit.get(0x5d4037), 0, 1.05, 0.015, g);
+    part(
+      plane(0.76, 0.56),
+      kit.get(0xffffff, { map: tex, roughness: 0.8 }),
+      0,
+      1.05,
+      0.032,
+      g,
+    ).castShadow = false;
+    return g;
+  },
+
+  /** Periodic table poster for the science lab. */
+  periodic: (kit) => {
+    const g = new THREE.Group();
+    const tex = canvasTexture('periodic', 128, 80, (ctx) => {
+      ctx.fillStyle = '#fafafa';
+      ctx.fillRect(0, 0, 128, 80);
+      const colors = ['#ef9a9a', '#ffcc80', '#fff59d', '#a5d6a7', '#90caf9', '#ce93d8'];
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < 18; c++) {
+          const gap = r > 0 && r < 3 && c > 1 && c < 12 - (r === 1 ? 0 : 10);
+          if (r === 0 && c > 0 && c < 17) continue;
+          if (gap) continue;
+          ctx.fillStyle = colors[(c + r) % colors.length]!;
+          ctx.fillRect(4 + c * 6.7, 6 + r * 10, 6, 9);
+        }
+      }
+      ctx.fillStyle = '#d9822b';
+      ctx.fillRect(4 + 10 * 6.7, 36, 6, 9); // Cu
+    });
+    part(
+      plane(0.7, 0.44),
+      kit.get(0xffffff, { map: tex, roughness: 0.8 }),
+      0,
+      1.1,
+      0.012,
+      g,
+    ).castShadow = false;
+    return g;
+  },
+
+  /** A framed portrait of Mr. Gravy, for his office. */
+  portrait: (kit) => {
+    const g = new THREE.Group();
+    const tex = canvasTexture('gravy-portrait', 64, 80, (ctx) => {
+      ctx.fillStyle = '#4e342e';
+      ctx.fillRect(0, 0, 64, 80);
+      ctx.fillStyle = '#3f4a52';
+      ctx.fillRect(14, 52, 36, 28);
+      ctx.fillStyle = '#e8b48a';
+      ctx.beginPath();
+      ctx.arc(32, 36, 15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#5d4037';
+      ctx.fillRect(20, 22, 24, 3);
+      ctx.fillStyle = '#d84339';
+      ctx.fillRect(30, 54, 4, 18);
+      ctx.fillStyle = '#212121';
+      ctx.fillRect(25, 34, 3, 3);
+      ctx.fillRect(36, 34, 3, 3);
+      ctx.fillRect(27, 43, 10, 2);
+    });
+    part(
+      rbox(0.44, 0.54, 0.03, 0.01),
+      kit.get(0xb8860b, { metalness: 0.6, roughness: 0.3 }),
+      0,
+      1.1,
+      0.015,
+      g,
+    );
+    part(
+      plane(0.36, 0.46),
+      kit.get(0xffffff, { map: tex, roughness: 0.7 }),
+      0,
+      1.1,
+      0.032,
       g,
     ).castShadow = false;
     return g;

@@ -5,8 +5,12 @@ import { css, FLOORS } from './palette';
 
 /** Pattern units per tile (patterns are drawn in these units). */
 const PX = 32;
-/** Texture pixels per tile: sharper than the pattern grid now the camera sits closer. */
-const RES = 48;
+/** Texture pixels per tile: sharp up close, but small enough for a phone on a big map. */
+const MAX_RES = 48;
+/** Keeps the floor texture within what phones handle comfortably. */
+const MAX_TEXTURE_SIDE = 3700;
+const resFor = (level: LevelDef) =>
+  Math.min(MAX_RES, Math.floor(MAX_TEXTURE_SIDE / Math.max(level.cols, level.rows)));
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -53,6 +57,37 @@ function tilePattern(
         ctx.fillRect(x + ((i * 11 + col * 3) % PX), y + ((i * 7 + row * 5) % PX), 2, 2);
       break;
     }
+    case 'office':
+    case 'library': {
+      // Carpet: fine flecks.
+      for (let i = 0; i < 10; i++)
+        ctx.fillRect(x + ((i * 13 + col * 5) % PX), y + ((i * 19 + row * 7) % PX), 1, 1);
+      break;
+    }
+    case 'lab':
+    case 'cafeteria': {
+      // Checkerboard of small tiles.
+      for (let i = 0; i < 4; i++)
+        for (let j = 0; j < 4; j++) if ((i + j) % 2 === 0) ctx.fillRect(x + i * 8, y + j * 8, 8, 8);
+      break;
+    }
+    case 'gym': {
+      // Maple boards with the odd court line.
+      for (let i = 0; i < 4; i++) ctx.fillRect(x, y + i * 8, PX, 1);
+      if (row % 9 === 4) {
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(x, y + 14, PX, 3);
+      }
+      break;
+    }
+    case 'kitchen': {
+      for (let i = 0; i < 2; i++) {
+        ctx.fillRect(x + i * 16, y, 1, PX);
+        ctx.fillRect(x, y + i * 16, PX, 1);
+      }
+      break;
+    }
+    case 'mechanical':
     case 'closet':
     case 'exterior': {
       for (let i = 0; i < 8; i++)
@@ -69,11 +104,12 @@ function tilePattern(
 
 /** Painted floor plan for the whole level: per-room materials, parking stripes, room names. */
 export function createFloorTexture(level: LevelDef): THREE.CanvasTexture {
+  const res = resFor(level);
   const canvas = document.createElement('canvas');
-  canvas.width = level.cols * RES;
-  canvas.height = level.rows * RES;
+  canvas.width = level.cols * res;
+  canvas.height = level.rows * res;
   const ctx = canvas.getContext('2d')!;
-  ctx.scale(RES / PX, RES / PX);
+  ctx.scale(res / PX, res / PX);
 
   for (let row = 0; row < level.rows; row++) {
     for (let col = 0; col < level.cols; col++) {

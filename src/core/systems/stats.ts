@@ -1,6 +1,6 @@
 import { BALANCE, TILE_SIZE } from '../content/balance';
 import { SKILLS } from '../content/skills';
-import { UPGRADES } from '../content/upgrades';
+import { UPGRADE_CATEGORIES, UPGRADES } from '../content/upgrades';
 import type {
   CharacterDef,
   EffectiveStats,
@@ -77,7 +77,8 @@ export function deriveStats(
   ownedUpgrades: readonly string[],
   skills: readonly string[] = [],
 ): EffectiveStats {
-  const gear = Object.values(activeUpgrades(ownedUpgrades)).map((u) => u.effect);
+  const active = activeUpgrades(ownedUpgrades);
+  const gear = Object.values(active).map((u) => u.effect);
   const learned = skills.map((id) => SKILLS.find(id)?.effect).filter((e) => e !== undefined);
   const m = combineModifiers([...gear, ...learned]);
   const walkSpeed = BALANCE.player.walkSpeed[character.stats.speed] * m.speedMult;
@@ -105,5 +106,8 @@ export function deriveStats(
     shiftSeconds: BALANCE.shift.durationSeconds + m.shiftBonusSeconds,
     maxWarnings: BALANCE.warnings.max + m.extraHearts,
     catchForgiveness: m.catchForgiveness,
+    gearTiers: Object.fromEntries(
+      Object.keys(UPGRADE_CATEGORIES).map((c) => [c, active[c as UpgradeCategory]?.tier ?? 0]),
+    ) as Record<UpgradeCategory, number>,
   };
 }

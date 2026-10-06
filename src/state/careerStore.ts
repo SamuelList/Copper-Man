@@ -28,6 +28,8 @@ export interface CareerData {
   inventory: Record<string, number>;
   /** Levels gained by the last shift (for the summary screen). */
   lastLevelsGained: number;
+  /** Explored tiles per level id (see core/systems/exploration). */
+  explored: Record<string, string>;
 }
 
 export interface CareerActions {
@@ -42,7 +44,7 @@ export interface CareerActions {
 export type CareerStore = CareerData & CareerActions;
 
 export const SAVE_KEY = 'copper-man/career';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export const initialCareer = (): CareerData => ({
   active: false,
@@ -60,6 +62,7 @@ export const initialCareer = (): CareerData => ({
   skills: [],
   inventory: {},
   lastLevelsGained: 0,
+  explored: {},
 });
 
 /**
@@ -87,6 +90,19 @@ export function migrateCareer(persisted: unknown, fromVersion: number): CareerDa
     });
     if (data.lastSummary) {
       data.lastSummary = { ...data.lastSummary, xp: [], xpTotal: 0, inventory: {} };
+    }
+  }
+  if (fromVersion < 3) {
+    // v2 had no exploration (and the school has since doubled in size).
+    data.explored = {};
+    if (data.lastSummary) {
+      data.lastSummary = {
+        ...data.lastSummary,
+        levelId: 'school',
+        explored: '',
+        exploredFraction: 0,
+        roomsDiscovered: [],
+      };
     }
   }
   return data;
@@ -138,6 +154,7 @@ export const createCareerStore = (storage: () => StateStorage = safeLocalStorage
               skillPoints: s.skillPoints + leveled.levelsGained,
               lastLevelsGained: leveled.levelsGained,
               inventory: { ...summary.inventory },
+              explored: { ...s.explored, [summary.levelId]: summary.explored },
             };
           }),
 

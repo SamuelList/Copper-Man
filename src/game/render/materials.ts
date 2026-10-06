@@ -57,11 +57,14 @@ vec2 copperUv = vec2( copperSample.x / uMapSize.x, 1.0 - copperSample.y / uMapSi
 // Beyond the map edge (the grass verge) is plain daylight, never fogged.
 float copperInside = step( 0.0, copperUv.x ) * step( copperUv.x, 1.0 ) * step( 0.0, copperUv.y ) * step( copperUv.y, 1.0 );
 float copperLight = mix( 1.0, texture2D( uLightMap, copperUv ).r, copperInside );
-float copperSeen = mix( 1.0, texture2D( uFogMap, copperUv ).r, uFogOn * copperInside );
-// Out of sight: darker and washed out, like a half-remembered room.
+// Fog: 0 never seen, 0.5 remembered, 1 in sight right now.
+float copperFog = mix( 1.0, texture2D( uFogMap, copperUv ).r, uFogOn * copperInside );
+float copperSeen = smoothstep( 0.55, 0.95, copperFog );
+float copperKnown = smoothstep( 0.05, 0.4, copperFog );
+// Out of sight: darker and washed out, like a half-remembered room. Never seen: black.
 vec3 copperGrey = vec3( dot( gl_FragColor.rgb, vec3( 0.299, 0.587, 0.114 ) ) );
 gl_FragColor.rgb = mix( copperGrey, gl_FragColor.rgb, mix( 0.35, 1.0, copperSeen ) );
-gl_FragColor.rgb *= mix( 0.16, 1.0, copperLight ) * mix( 0.13, 1.0, copperSeen );
+gl_FragColor.rgb *= mix( 0.16, 1.0, copperLight ) * mix( 0.13, 1.0, copperSeen ) * copperKnown;
 `;
 
 /** Apply map-space light + fog of war to a lit (Standard/Lambert/Phong) material. */

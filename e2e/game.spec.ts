@@ -8,6 +8,7 @@ interface DebugWindow {
       player: { pos: { x: number; y: number }; abilityActive: number; crouching: boolean };
       boss: { pos: { x: number; y: number }; mode: string };
       bag: { capacity: number; contents: Record<string, number> };
+      vanBoxes: { minX: number; maxX: number; minY: number; maxY: number }[];
     };
   };
 }
@@ -77,9 +78,11 @@ test('a full day: hire, sneak, crouch, sell, clock out, shop, next day', async (
   // Sell a bag of copper at the van (boss parked far away so the test is deterministic).
   await page.evaluate((tile) => {
     const s = (window as DebugWindow).__copper!.session;
-    s.boss.pos = { x: 55 * tile, y: 6 * tile };
+    s.boss.pos = { x: 85 * tile, y: 27 * tile };
     s.bag = { ...s.bag, contents: { ...s.bag.contents, copper: 1.5 } };
-    s.player.pos = { x: 5.5 * tile, y: 15.5 * tile };
+    // Just east of the van.
+    const van = s.vanBoxes[s.vanBoxes.length - 1]!;
+    s.player.pos = { x: van.maxX + tile * 0.5, y: (van.minY + van.maxY) / 2 };
   }, TILE);
   await expect(page.getByTestId('interact-prompt')).toContainText('Sell scrap');
   await page.keyboard.down('e');

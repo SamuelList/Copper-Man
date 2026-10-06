@@ -4,7 +4,20 @@ import type { TilePos } from '../model/types';
 export type TileKind = 'wall' | 'floor' | 'door' | 'lockedDoor' | 'van' | 'fixture' | 'prop';
 
 export type RoomKind =
-  'exterior' | 'hallway' | 'classroom' | 'restroom' | 'closet' | 'lounge' | 'boiler';
+  | 'exterior'
+  | 'hallway'
+  | 'classroom'
+  | 'restroom'
+  | 'closet'
+  | 'lounge'
+  | 'boiler'
+  | 'office'
+  | 'library'
+  | 'lab'
+  | 'gym'
+  | 'cafeteria'
+  | 'kitchen'
+  | 'mechanical';
 
 export interface TileRect {
   col: number;
@@ -38,6 +51,8 @@ export interface LevelDoor {
   id: string;
   tile: TilePos;
   locked: boolean;
+  /** Security lock: needs the Master Key (or bolt cutters). */
+  security?: true;
 }
 
 /**
@@ -59,5 +74,7 @@ export interface LevelDef {
   playerSpawn: TilePos;
   bossRoute: TilePos[];
   studentSpawns: TilePos[];
+  /** Each teacher's starting spot; the room it's in becomes their classroom. */
+  teacherSpawns: TilePos[];
   coworkerSpots: TilePos[];
 }

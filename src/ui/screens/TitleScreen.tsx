@@ -45,9 +45,19 @@ export function TitleScreen() {
             has limited room.
           </li>
           <li>
+            <strong>Explore.</strong> The school starts pitch black. What you&apos;ve seen stays on
+            your map; you only see people in your line of sight, so listen for footsteps.
+          </li>
+          <li>
             <strong>Stay out of sight.</strong> {NPCS.boss.name} only cares if you&apos;re carrying
-            or scrapping. Students snitch if they watch you scrap. You only see what your worker can
-            see, so listen for footsteps.
+            or scrapping, but he plans his own rounds, notices stripped fixtures, hears you sprint
+            and checks hiding spots. Teachers radio him. Students snitch on scrapping; read their
+            look: the hall monitor&apos;s sash, the phone zombie, the class clown&apos;s propeller.
+          </li>
+          <li>
+            <strong>Go further as you grow.</strong> The east wing pays best but it&apos;s far from
+            the van, and its technical fixtures need gear or experience (the prompt tells you what).
+            Security doors need the Master Key or bolt cutters.
           </li>
           <li>
             <strong>Use the dark and the furniture.</strong> Dark rooms make you harder to spot.

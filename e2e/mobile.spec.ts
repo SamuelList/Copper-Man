@@ -7,6 +7,7 @@ interface DebugWindow {
       player: { pos: { x: number; y: number }; crouching: boolean; stamina: number };
       boss: { pos: { x: number; y: number } };
       bag: { capacity: number; contents: Record<string, number> };
+      vanBoxes: { minX: number; maxX: number; minY: number; maxY: number }[];
       inventory: Record<string, number>;
     };
   };
@@ -63,7 +64,7 @@ test('plays a shift with touch controls on a phone', async ({ page }, testInfo) 
 
   // Park the boss far away so nothing interrupts the test.
   await page.evaluate((tile) => {
-    (window as DebugWindow).__copper!.session.boss.pos = { x: 55 * tile, y: 6 * tile };
+    (window as DebugWindow).__copper!.session.boss.pos = { x: 85 * tile, y: 27 * tile };
   }, TILE);
 
   // Drag the floating stick to the right: the worker walks screen-right.
@@ -102,7 +103,9 @@ test('plays a shift with touch controls on a phone', async ({ page }, testInfo) 
   await page.evaluate((tile) => {
     const s = (window as DebugWindow).__copper!.session;
     s.bag = { ...s.bag, contents: { ...s.bag.contents, copper: 1.5 } };
-    s.player.pos = { x: 5.5 * tile, y: 15.5 * tile };
+    // Just east of the van.
+    const van = s.vanBoxes[s.vanBoxes.length - 1]!;
+    s.player.pos = { x: van.maxX + tile * 0.5, y: (van.minY + van.maxY) / 2 };
   }, TILE);
   const interact = page.getByTestId('touch-interact');
   await expect(interact).toHaveAccessibleName(/Sell scrap/);

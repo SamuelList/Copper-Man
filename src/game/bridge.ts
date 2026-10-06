@@ -12,8 +12,15 @@ const TOAST_EVENTS = [
   'boss:mode',
   'boss:escalated',
   'student:alert',
+  'student:laughed',
+  'teacher:report',
+  'room:discovered',
+  'boss:remark',
   'coworker:found',
   'ability:ready',
+  'player:talkedOut',
+  'gadget:used',
+  'gadget:failed',
 ] as const satisfies readonly (keyof ShiftEvents)[];
 
 /** HUD refresh rate for continuous values (timer, stamina, progress). */

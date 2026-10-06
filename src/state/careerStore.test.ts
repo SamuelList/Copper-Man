@@ -13,6 +13,7 @@ function memoryStorage(): StateStorage & { data: Map<string, string> } {
 }
 
 const summary = (overrides: Partial<ShiftSummary> = {}): ShiftSummary => ({
+  levelId: 'school',
   day: 1,
   endedBy: 'time',
   fired: false,
@@ -28,6 +29,9 @@ const summary = (overrides: Partial<ShiftSummary> = {}): ShiftSummary => ({
   xp: [{ label: 'Sales', amount: 48 }],
   xpTotal: 48,
   inventory: {},
+  explored: '10.5.20',
+  exploredFraction: 0.14,
+  roomsDiscovered: ['Gymnasium'],
   ...overrides,
 });
 
@@ -111,6 +115,25 @@ describe('career store', () => {
     expect(migrateCareer({ cash: 50, ownedUpgrades: 'bad' }, 0)).toMatchObject({
       cash: 50,
       ownedUpgrades: [],
+    });
+  });
+
+  it('remembers explored tiles per level between shifts', () => {
+    const store = createCareerStore(memoryStorage);
+    store.getState().startCareer('dalton');
+    store.getState().applyShiftResult(summary());
+    expect(store.getState().explored).toEqual({ school: '10.5.20' });
+    store.getState().applyShiftResult(summary({ levelId: 'annex', explored: '3.3' }));
+    expect(store.getState().explored).toEqual({ school: '10.5.20', annex: '3.3' });
+  });
+
+  it('migrates a v2 save to exploration', () => {
+    const v2 = { active: true, characterId: 'dunkin', day: 6, level: 4, skills: ['haggler'] };
+    expect(migrateCareer(v2, 2)).toMatchObject({
+      day: 6,
+      level: 4,
+      skills: ['haggler'],
+      explored: {},
     });
   });
 

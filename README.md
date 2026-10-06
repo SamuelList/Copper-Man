@@ -53,22 +53,45 @@ Landscape is roomiest, but portrait works too. `?touch` forces touch controls on
   - **Gear:** eight categories of tiered upgrades: boots, tools, bags, keys, gloves (scrap quietly), disguises (carry without looking guilty), radios (hear the boss from further away), and scrapyard deals (sell for more).
   - **Gadgets:** one-use items that carry over until used. Energy drinks give free sprinting. Whoopee cushions are thrown ahead and lure Mr. Gravy to the noise. Bolt cutters open a locked door instantly.
   - **Skills:** everything you do earns XP (scrapping, selling, doors, waking your coworker, finishing a shift, never getting caught). Each level is a skill point for three trees: **Shadow** (stealth), **Hustle** (speed and capacity), and **Wheeler-Dealer** (money, an extra heart, and talking your way out of one catch per shift).
-- **Stealth.** Mr. Gravy patrols the hallways with a vision cone that walls block.
-  - He only cares if you're **carrying scrap** or **scrapping**. While he sees that, a detection meter fills; when it's full, he chases you.
-  - If he catches you: you get a warning, your bag is confiscated, and you're escorted back to the van.
-  - If he catches you empty-handed: he tells you to get back to work.
-  - He gets faster as the shift goes on and as you sell more.
+- **Scrapping takes time, and fixtures take longer to come back.** Recharge times are double the design board's, so you can't just farm one room; spread out.
+- **Mr. Gravy.** His vision cone is blocked by walls. He only cares if you're **carrying scrap** or **scrapping**: while he sees that, a detection meter fills, and when it's full he chases you.
+  - **He plans his own rounds.** He picks rooms to drop in on, weighted toward ones he hasn't checked lately and ones where there's been trouble. He stops in the doorway and looks around. Keep hitting one room and he'll keep coming back to it.
+  - **He notices things.** He spots stripped fixtures ("Somebody stripped this radiator!") and goes to look. He hears you sprint nearby (less through walls). Whoopee cushions lure him to the noise.
+  - **He's hard to shake.** If he loses you he heads where you were running, not where he last saw you. Then he checks the hiding spots nearby, and sometimes stakes out the exit to your van. He talks while he works, so you can hear him coming.
+  - If he catches you: you get a warning, your bag is confiscated, and you're escorted back to the van. Empty-handed, he just tells you to get back to work. He gets faster as the shift goes on and as you sell more.
+- **Teachers** sit between students and the boss. Each one teaches at the front of their room, steps into the hall between lessons, and takes coffee breaks in the lounge. They notice scrapping _and_ full bags, and when they're sure they radio Mr. Gravy, who hurries over.
+- **Students** have personalities, rolled each shift. Their look gives them away:
+
+  | Look                  | Personality   | Behaviour                                                         |
+  | --------------------- | ------------- | ----------------------------------------------------------------- |
+  | Plain                 | Student       | Wanders the room, snitches on scrapping                           |
+  | Orange sash           | Hall Monitor  | Sharp-eyed, roams the halls, also reports a full bag              |
+  | Glowing phone         | Phone Zombie  | Barely looks up, barely moves                                     |
+  | Propeller cap         | Class Clown   | Bounces around the halls and often just laughs instead of telling |
+  | Glasses, sweater vest | Teacher's Pet | Tells the boss and every teacher nearby                           |
+  | Slumped, "z"          | Sleepyhead    | Blind while dozing, groggy when awake                             |
+
+- **Exploring.** The school starts pitch black. What you've seen stays on your map (greyed out when it's out of sight) and is saved with your career. Every new room is worth XP. You only see people in your line of sight; a fading ghost marks where you last saw them, and a pulsing ring shows footsteps you can hear through walls.
 - **Line of sight.**
-  - **Fog of war:** you only see what your worker can see. Out-of-sight areas go dark and grey, and NPCs there are hidden. A fading ghost marks where you last saw them, and a pulsing ring shows footsteps you can hear through walls.
   - **Vision cones** are clipped exactly against walls and tall furniture. The bright inner zone spots you fast; the faint outer zone is slow to notice you.
-  - **Cover:** crouch (C) behind desks, tables, fixtures and benches to break line of sight. Lockers, shelves and boilers block sight entirely.
-  - **Light:** every room has a light level. In the dark (the boiler room, closets) NPCs notice you more slowly and from less far away. The HUD light meter shows how exposed you are.
-- **Students.** They wander their rooms and snitch if they watch you scrap. The boss comes to investigate.
+  - **Cover:** crouch (C) behind desks, tables, counters, bins and benches to break line of sight. Lockers, shelves, bookshelves, stall dividers and boilers block sight entirely.
+  - **Light:** every room has a light level. In the dark (the boiler, mechanical and server rooms, closets) people notice you more slowly and from less far away. The HUD light meter shows how exposed you are.
 - **Sleepy coworker.** Asleep somewhere different each shift. Find them to win back a heart.
-- **Map.**
-  - Hallways have the high-value fixtures and the boss.
-  - Classrooms are safer but cheaper.
-  - The **boiler room** has copper piles behind a locked door, with one way in or out. It's dark, with boilers to hide behind.
+- **The school** is about twice the size of the first version. The van is on the west side; the further east you go, the bigger the scrap and the longer the walk back. That's where speed, bag size and skills pay off.
+  - **West:** classrooms, the main office (Mr. Gravy's turf, with a trophy case) and the library.
+  - **Centre:** boys' and girls' restrooms (urinals, sinks, hand dryers, stalls), the science lab, cafeteria, kitchen and teachers' lounge.
+  - **East:** the gym and locker room, the music room, and the technical rooms.
+  - **Technical fixtures** need gear or experience, and the prompt names exactly what:
+
+    | Fixture                  | Needs                            |
+    | ------------------------ | -------------------------------- |
+    | Hand dryer, cooler coils | Ten-in-One Screwdriver           |
+    | Electrical panel         | Work Gloves                      |
+    | Trophy case              | Pocket Plyers                    |
+    | Server rack              | Level 4                          |
+    | Chiller compressor       | Level 6 and the Milt-Wakee Drill |
+
+  - **Security doors** (the mechanical and boiler rooms) need the Master Key, or bolt cutters.
 
 | Worker  | Speed | Repair | Carry | Trade    | Ability                                                                  |
 | ------- | ----- | ------ | ----- | -------- | ------------------------------------------------------------------------ |
@@ -98,7 +121,7 @@ src/
     content/   characters, fixtures, props, metals, upgrades, consumables, skills, abilities, npcs, balance
     model/     shared types
     systems/   stats, progression, scrapping, bag, economy, warnings, escalation, shop, vision, detection, pathfinding, movement
-    ai/        bossBrain, studentBrain, navigation
+    ai/        bossBrain (plans rounds, heat memory, search), studentBrain, teacherBrain, navigation
     level/     ASCII level format + validator, levels/ (school map)
     session/   ShiftSession + types
   state/       careerStore, shiftStore, appStore, inputMode, virtualInput (touch → game), messages

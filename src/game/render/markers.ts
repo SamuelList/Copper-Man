@@ -286,3 +286,86 @@ export class PopFx {
     }
   }
 }
+
+/**
+ * A comic speech bubble over someone's head. Text is redrawn into its canvas only when it
+ * changes; it fades out after a few seconds.
+ */
+export class SpeechBubble {
+  readonly sprite: THREE.Sprite;
+  private readonly canvas = document.createElement('canvas');
+  private readonly texture: THREE.CanvasTexture;
+  private age = Infinity;
+  private static readonly LIFE = 2.6;
+
+  constructor() {
+    this.canvas.width = 512;
+    this.canvas.height = 128;
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.colorSpace = THREE.SRGBColorSpace;
+    this.sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: this.texture, depthTest: false, transparent: true }),
+    );
+    this.sprite.scale.set(2.4, 0.6, 1);
+    this.sprite.renderOrder = 21;
+    this.sprite.visible = false;
+  }
+
+  say(text: string, color = '#1b1b1b') {
+    const ctx = this.canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, 512, 128);
+    ctx.font = 'bold 40px system-ui, sans-serif';
+    const w = Math.min(500, ctx.measureText(text).width + 44);
+    const x = (512 - w) / 2;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1b1b1b';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    roundedRect(ctx, x, 8, w, 84, 26);
+    ctx.moveTo(240, 90);
+    ctx.lineTo(256, 120);
+    ctx.lineTo(272, 90);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(243, 84, 26, 10);
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 256, 52, 470);
+    this.texture.needsUpdate = true;
+    this.age = 0;
+  }
+
+  /** Follow a world point; visible only while fresh and while `audible`. */
+  update(x: number, y: number, z: number, dt: number, audible: boolean) {
+    this.age += dt;
+    const t = this.age / SpeechBubble.LIFE;
+    this.sprite.visible = audible && t < 1;
+    if (!this.sprite.visible) return;
+    this.sprite.position.set(x, y + Math.min(1, this.age * 6) * 0.1, z);
+    this.sprite.material.opacity = 1 - Math.max(0, (t - 0.75) / 0.25);
+  }
+
+  dispose() {
+    this.texture.dispose();
+    this.sprite.material.dispose();
+  }
+}
+
+/** Rounded rectangle path (ctx.roundRect is missing on older iPhones). */
+function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}

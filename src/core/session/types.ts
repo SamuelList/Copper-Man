@@ -1,4 +1,4 @@
-import type { BossMode } from '../ai/bossBrain';
+import type { BossMode, BossRemark } from '../ai/bossBrain';
 import type { LevelDef } from '../level/types';
 import type { Bag, BagContents, Box, FixtureDef, MetalId, TilePos, Vec2 } from '../model/types';
 
@@ -15,6 +15,10 @@ export interface ShiftConfig {
   warnings: number;
   seed: number;
   durationSeconds?: number;
+  /** Career level (technical fixtures need experience). */
+  workerLevel?: number;
+  /** Tiles already explored on this level (see systems/exploration). */
+  explored?: string;
 }
 
 /** One frame of player intent, produced by whatever input device is in use. */
@@ -46,6 +50,8 @@ export interface PlayerState {
   abilityCooldown: number;
   /** Seconds of free sprinting left (energy drink). */
   boost: number;
+  /** Actual velocity this tick, pixels per second. */
+  vel: Vec2;
 }
 
 export interface FixtureState {
@@ -58,12 +64,16 @@ export interface FixtureState {
   pos: Vec2;
   rechargeLeft: number;
   rechargeTotal: number;
+  /** Mr. Gravy has already spotted that this one was stripped. */
+  noticed: boolean;
 }
 
 export interface DoorState {
   id: string;
   tile: TilePos;
   locked: boolean;
+  /** Needs the Master Key (or bolt cutters). */
+  security: boolean;
 }
 
 export interface CoworkerState {
@@ -90,6 +100,8 @@ export type ShiftStatus = 'running' | 'ended';
 export type ShiftEndReason = 'time' | 'fired' | 'clockOut';
 
 export interface ShiftSummary {
+  /** Level played (exploration is saved per level). */
+  levelId: string;
   day: number;
   endedBy: ShiftEndReason;
   fired: boolean;
@@ -108,6 +120,11 @@ export interface ShiftSummary {
   xpTotal: number;
   /** Gadgets left over (carry back into the career inventory). */
   inventory: Record<string, number>;
+  /** The level's explored tiles after this shift (save it for next time). */
+  explored: string;
+  exploredFraction: number;
+  /** Rooms seen for the first time this shift. */
+  roomsDiscovered: string[];
 }
 
 export interface XpLine {
@@ -130,7 +147,13 @@ export interface ShiftEvents {
   'player:excused': Record<string, never>;
   'boss:mode': { mode: BossMode; previous: BossMode };
   'boss:escalated': { level: number };
-  'student:alert': { studentId: string; pos: Vec2 };
+  'student:alert': { studentId: string; personality: string; pos: Vec2 };
+  /** Their meter filled, but they just laughed it off (class clown). */
+  'student:laughed': { studentId: string; personality: string };
+  'teacher:report': { teacherId: string; name: string; pos: Vec2 };
+  /** Something Mr. Gravy says out loud; `detail` names what he found. */
+  'boss:remark': { remark: BossRemark; pos: Vec2; detail?: string };
+  'room:discovered': { roomId: string; name: string };
   'coworker:found': { warnings: number };
   'ability:activated': { abilityId: string };
   'ability:ready': { abilityId: string };

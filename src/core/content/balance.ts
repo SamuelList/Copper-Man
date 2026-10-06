@@ -86,9 +86,29 @@ export const BALANCE = {
   boss: {
     chaseMult: 1.6,
     investigateMult: 1.3,
+    /** Hurrying to a student's or teacher's report. */
+    reportMult: 1.5,
     repathSeconds: 0.35,
     loseSightSeconds: 2.5,
-    searchSeconds: 3.5,
+    /** How far ahead (seconds of your last seen running) he guesses you went. */
+    predictSeconds: 1.2,
+    /** Looking around a room he's dropped in on; longer where there's been trouble. */
+    inspectSeconds: { min: 1.5, max: 3 },
+    /** Hiding spots he checks after losing you, how far out, and how long he looks at each. */
+    searchSpots: 3,
+    searchRadiusTiles: 5,
+    lookSeconds: 1.2,
+    /** After you get away, he may stake out the way to the van. */
+    guardChance: 0.5,
+    guardSeconds: { min: 10, max: 16 },
+    /** He hears you sprint within this many tiles (half that through walls). */
+    hearSprintTiles: 5,
+    hearCooldownSeconds: 1.5,
+    /** Spots stripped fixtures within this fraction of his sight range. */
+    evidenceRangeMult: 0.9,
+    /** Suspicion per room ("heat") fades with this time constant; trouble adds to it. */
+    heatDecaySeconds: 150,
+    heat: { report: 1.5, evidence: 1, sighting: 1, noise: 0.4, escape: 2 },
     /** Escalation ("boss gets faster after x point"). */
     escalation: {
       perLevelMult: 0.1,
@@ -102,6 +122,27 @@ export const BALANCE = {
     idleSeconds: { min: 1.5, max: 4 },
     alarmSeconds: 2,
     alertCooldownSeconds: 8,
+    /** Roaming students wander this far past their room's walls, tiles. */
+    roamTiles: 4,
+    /** Dozing students sleep and wake in cycles about this long. */
+    dozeCycleSeconds: 12,
+  },
+  /** Teachers sit between students and the boss: they notice more, and radio Mr. Gravy. */
+  teacher: {
+    walkSpeed: 66,
+    visionRange: TILE_SIZE * 6,
+    fovDegrees: 85,
+    fillRate: 0.75,
+    teachSeconds: { min: 14, max: 26 },
+    hallSeconds: { min: 3, max: 6 },
+    breakSeconds: { min: 10, max: 18 },
+    /** Chance a teacher heads to the lounge instead of the hall between lessons. */
+    breakChance: 0.3,
+    /** Staring you down while they call it in. */
+    confrontSeconds: 3,
+    reportCooldownSeconds: 14,
+    /** A teacher's pet's tattling reaches teachers this many tiles away. */
+    petReachTiles: 12,
   },
   /** Experience: what earns it and how much each level costs. */
   xp: {
@@ -115,6 +156,12 @@ export const BALANCE = {
     cleanShift: 40,
     firstLevel: 100,
     perLevelIncrease: 50,
+    /** First time you set eyes on a room. */
+    newRoom: 10,
+  },
+  explore: {
+    /** How often what you can see is added to the map you remember. */
+    sampleSeconds: 0.25,
   },
   gadgets: {
     /** Seconds of free sprinting after an energy drink. */
@@ -132,6 +179,13 @@ export const BALANCE = {
       closet: 0.4,
       lounge: 0.6,
       boiler: 0.25,
+      office: 0.85,
+      library: 0.65,
+      lab: 0.85,
+      gym: 0.95,
+      cafeteria: 0.9,
+      kitchen: 0.75,
+      mechanical: 0.3,
     } satisfies Record<RoomKind, number>,
     /** Doorways and anything outside a room. */
     fallback: 0.75,

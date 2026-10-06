@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { MaterialKit } from '../materials';
 import { PALETTE } from '../palette';
-import { metals } from './fixtures';
+import { metals } from './common';
 import { box, canvasTexture, cyl, ico, part, plane, rbox, sphere, torus } from './parts';
 
 const vanLabel = () =>
@@ -117,7 +117,31 @@ const staffOnlySign = () =>
  * A locked door in its frame, spanning local X across the doorway. The frame is static; the
  * leaf swings open about its hinge at -X when the door is unlocked.
  */
-export function buildLockedDoor(kit: MaterialKit): { root: THREE.Group; leaf: THREE.Group } {
+const securitySign = () =>
+  canvasTexture('authorized-only', 128, 64, (ctx) => {
+    ctx.fillStyle = '#fdd835';
+    ctx.fillRect(0, 0, 128, 64);
+    ctx.fillStyle = '#111';
+    for (let x = -64; x < 128; x += 20) {
+      ctx.beginPath();
+      ctx.moveTo(x, 64);
+      ctx.lineTo(x + 10, 64);
+      ctx.lineTo(x + 26, 48);
+      ctx.lineTo(x + 16, 48);
+      ctx.fill();
+    }
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('AUTHORIZED', 64, 20);
+    ctx.fillText('PERSONNEL ONLY', 64, 38);
+  });
+
+/** A locked door; security doors are steel with a keypad instead of a padlock. */
+export function buildLockedDoor(
+  kit: MaterialKit,
+  security = false,
+): { root: THREE.Group; leaf: THREE.Group } {
+  if (security) return buildSecurityDoor(kit);
   const root = new THREE.Group();
   const frame = kit.get(0x5d4037, { roughness: 0.7 });
   for (const x of [-0.47, 0.47]) part(rbox(0.07, 1.58, 0.2, 0.015), frame, x, 0.79, 0, root);
@@ -249,4 +273,37 @@ export function buildCoworker(kit: MaterialKit): THREE.Group {
   cup.rotation.x = Math.PI / 2;
   part(cyl(0.09, 0.09, 0.004, 12), kit.get(0x5d4037, { roughness: 0.1 }), 0.24, 0.042, 0.38, root);
   return root;
+}
+
+function buildSecurityDoor(kit: MaterialKit): { root: THREE.Group; leaf: THREE.Group } {
+  const root = new THREE.Group();
+  const frame = kit.get(0x37474f, { roughness: 0.5, metalness: 0.6 });
+  for (const x of [-0.47, 0.47]) part(rbox(0.08, 1.58, 0.22, 0.015), frame, x, 0.79, 0, root);
+  part(rbox(1.0, 0.1, 0.22, 0.015), frame, 0, 1.56, 0, root);
+  // Keypad with a red light beside the door.
+  part(rbox(0.07, 0.11, 0.03, 0.01), kit.get(0x263238), 0.47, 0.95, 0.12, root);
+  part(box(0.02, 0.02, 0.01), kit.get(0xff5252, { emissive: 0xd50000 }), 0.47, 0.98, 0.137, root);
+
+  const leaf = new THREE.Group();
+  leaf.position.x = -0.43;
+  root.add(leaf);
+  const steel = kit.get(0x78909c, { roughness: 0.35, metalness: 0.7 });
+  const { chrome } = metals(kit);
+  part(rbox(0.86, 1.5, 0.09, 0.01), steel, 0.43, 0.76, 0, leaf);
+  for (const z of [-0.05, 0.05]) {
+    for (const y of [0.35, 0.75, 1.15])
+      part(box(0.8, 0.02, 0.01), kit.get(0x607d8b), 0.43, y, z, leaf);
+    const sign = part(
+      plane(0.36, 0.18),
+      kit.get(0xffffff, { map: securitySign() }),
+      0.43,
+      0.95,
+      z * 1.02,
+      leaf,
+    );
+    sign.rotation.y = z < 0 ? Math.PI : 0;
+    sign.castShadow = false;
+  }
+  part(rbox(0.05, 0.05, 0.3, 0.02), chrome, 0.78, 0.75, 0, leaf);
+  return { root, leaf };
 }

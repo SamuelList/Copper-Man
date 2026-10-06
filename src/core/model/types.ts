@@ -89,6 +89,17 @@ export interface FixtureDef {
   cover: 'low' | 'none';
   footprint: Footprint;
   color: number;
+  /** Technical fixtures need gear or experience before they can be stripped. */
+  requires?: Requirement;
+}
+
+/**
+ * What it takes to use something: a minimum worker level and/or a minimum owned tier in some
+ * gear categories (e.g. `{ gear: { tools: 2 } }` = Pocket Plyers or better).
+ */
+export interface Requirement {
+  level?: number;
+  gear?: Partial<Record<UpgradeCategory, number>>;
 }
 
 /** Non-interactive furniture. Tall props block sight; low props are cover. */
@@ -191,6 +202,50 @@ export interface NpcDef {
   awareness: StatLevel;
 }
 
+/** How a student behaves. Students get one at random each shift; their look gives it away. */
+export interface PersonalityDef {
+  id: string;
+  name: string;
+  /** One line for the player: what to expect from them. */
+  blurb: string;
+  /** Relative chance of being picked. */
+  weight: number;
+  /** Multipliers on the base student vision cone and how fast they notice. */
+  sight: { rangeMult: number; fovMult: number; fillMult: number };
+  /** Also snitches on a worker carrying scrap (most only care about scrapping). */
+  snitchesOnCarrying: boolean;
+  /** Chance a full meter actually becomes a snitch (the class clown may just laugh). */
+  snitchChance: number;
+  /** Also tells nearby teachers, not just the boss. */
+  tellsTeachers: boolean;
+  /** 'stay' barely moves, 'room' wanders the room, 'roam' drifts out into the halls. */
+  wander: 'stay' | 'room' | 'roam';
+  speedMult: number;
+  idleSeconds: NumRange;
+  /** Dozes off for part of the time (blind while asleep): fraction of the time awake. */
+  awakeFraction?: number;
+  /** Visual tell for the renderer. */
+  look: 'plain' | 'sash' | 'phone' | 'propeller' | 'glasses' | 'sleepy';
+}
+
+/** A teacher. Content colours describe their outfit for the renderer. */
+export interface TeacherDef {
+  id: string;
+  name: string;
+  /** Multiplies how fast they notice you. */
+  strictness: number;
+  speedMult: number;
+  outfit: {
+    shirt: number;
+    pants: number;
+    hair?: number;
+    bald?: boolean;
+    cap?: number;
+    tie?: number;
+    glasses?: boolean;
+  };
+}
+
 /** Signals that can make the player look suspicious to NPCs. */
 export type SuspicionSignal = 'carrying' | 'scrapping';
 
@@ -228,6 +283,8 @@ export interface EffectiveStats {
   shiftSeconds: number;
   maxWarnings: number;
   catchForgiveness: number;
+  /** Highest owned tier per gear category (0 = none), for technical requirements. */
+  gearTiers: Record<UpgradeCategory, number>;
 }
 
 export type BagContents = Record<MetalId, number>;

@@ -211,17 +211,19 @@ describe('ShiftSession progression + gadgets', () => {
     placePlayer(s, 2, 2);
     hold(s, 0.1, input());
     hold(s, 2, input({ interact: true }));
-    expect(gained.map((g) => g.reason)).toEqual(['Scrapping', 'Sales']);
+    expect(gained.map((g) => g.reason)).toEqual(['Exploring', 'Scrapping', 'Sales']);
     s.clockOut();
     const summary = s.getSummary()!;
     expect(summary.xp.map((l) => l.label)).toEqual([
+      'Exploring',
       'Scrapping',
       'Sales',
       'Finished the shift',
       'Never caught',
     ]);
     expect(summary.xpTotal).toBe(
-      BALANCE.xp.perScrap +
+      BALANCE.xp.newRoom +
+        BALANCE.xp.perScrap +
         Math.round(25 * BALANCE.xp.perDollar) +
         BALANCE.xp.shiftComplete +
         BALANCE.xp.cleanShift,
@@ -234,7 +236,7 @@ describe('ShiftSession progression + gadgets', () => {
     s.boss.mode = 'chase';
     s.boss.pos = { ...s.player.pos };
     s.tick(1 / 60, input());
-    expect(s.getSummary()?.xpTotal).toBe(0);
+    expect(s.getSummary()?.xp.map((l) => l.label)).not.toContain('Finished the shift');
   });
 
   it('sells for more with a scrapyard card', () => {
@@ -465,5 +467,128 @@ describe('ShiftSession movement feel', () => {
     // It sidesteps each wedged fixture (a short detour) and is past all five within 3.5s.
     hold(s, 2.15, w);
     expect(s.player.pos.x).toBeGreaterThan(11.5 * TILE_SIZE);
+  });
+});
+
+describe('ShiftSession: technical fixtures, exploration and the new NPCs', () => {
+  // Electrical panel (G) and server rack (N) on the north wall, a security door (K), a teacher (E).
+  const TECH = [
+    '##############',
+    '#V.G.N...K..1#',
+    '#VP....E.#..2#',
+    '#Z.......#...#',
+    '##############',
+  ];
+  const tech = (overrides: Partial<ShiftConfig> = {}) =>
+    new ShiftSession({
+      level: testLevel(TECH),
+      characterId: 'dalton',
+      ownedUpgrades: [],
+      day: 1,
+      warnings: 0,
+      seed: 3,
+      durationSeconds: 120,
+      ...overrides,
+    });
+  const standAt = (s: ShiftSession, x: number, y: number) => {
+    s.player.pos = { x: x * TILE_SIZE, y: y * TILE_SIZE };
+    s.tick(1 / 60, input());
+  };
+
+  it('technical fixtures need the right gear or enough experience', () => {
+    const s = tech();
+    standAt(s, 3.5, 1.8);
+    expect(s.currentTarget).toMatchObject({ label: 'Electrical Panel', enabled: false });
+    expect(s.currentTarget?.reason).toMatch(/Work Gloves/);
+    const geared = tech({ ownedUpgrades: ['work-gloves'] });
+    standAt(geared, 3.5, 1.8);
+    expect(geared.currentTarget).toMatchObject({ label: 'Electrical Panel', enabled: true });
+
+    const rookie = tech({ workerLevel: 3 });
+    standAt(rookie, 5.5, 1.8);
+    expect(rookie.currentTarget?.reason).toMatch(/level 4/);
+    const veteran = tech({ workerLevel: 4 });
+    standAt(veteran, 5.5, 1.8);
+    expect(veteran.currentTarget).toMatchObject({ label: 'Server Rack', enabled: true });
+  });
+
+  it('security doors need the Master Key, but bolt cutters still work', () => {
+    const s = tech({ inventory: { 'bolt-cutters': 1 } });
+    standAt(s, 8.5, 1.5);
+    expect(s.currentTarget).toMatchObject({ label: 'Security Door', enabled: false });
+    expect(s.currentTarget?.reason).toMatch(/Master Key/);
+    const unlocked = record(s, 'door:unlocked');
+    s.tick(1 / 60, input({ use: 'bolt-cutters' }));
+    expect(unlocked).toHaveLength(1);
+
+    const keyed = tech({ ownedUpgrades: ['efficient-key-ring', 'master-key'] });
+    standAt(keyed, 8.5, 1.5);
+    expect(keyed.currentTarget).toMatchObject({ label: 'Security Door', enabled: true });
+  });
+
+  it('remembers what you have seen, and only pays for a room the first time', () => {
+    const s = tech();
+    const found = record(s, 'room:discovered');
+    hold(s, 0.5, input());
+    expect(found).toHaveLength(1);
+    expect(s.explored.has(2, 2)).toBe(true);
+    expect(s.explored.has(11, 3)).toBe(false); // behind the security door's wall
+    s.clockOut();
+    const summary = s.getSummary()!;
+    expect(summary.roomsDiscovered).toEqual(['Everywhere']);
+    expect(summary.exploredFraction).toBeGreaterThan(0);
+
+    const next = tech({ explored: summary.explored });
+    expect(next.explored.has(2, 2)).toBe(true);
+    const again = record(next, 'room:discovered');
+    hold(next, 0.5, input());
+    expect(again).toHaveLength(0);
+  });
+
+  it('Mr. Gravy notices a stripped fixture on his rounds and goes to look', () => {
+    const s = tech();
+    const remarks = record(s, 'boss:remark');
+    const panel = s.fixtures.find((f) => f.def.id === 'electrical-panel')!;
+    panel.rechargeLeft = panel.rechargeTotal = 100;
+    s.boss.pos = { x: 6.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
+    s.boss.facing = Math.PI; // looking west, toward the panel
+    s.boss.mode = 'inspect';
+    s.boss.timer = 10;
+    s.player.pos = { x: 1.5 * TILE_SIZE, y: 3.5 * TILE_SIZE };
+    hold(s, 0.5, input());
+    expect(remarks.some((r) => r.remark === 'evidence' && r.detail === 'Electrical Panel')).toBe(
+      true,
+    );
+    expect(['investigate', 'search']).toContain(s.boss.mode);
+    expect(panel.noticed).toBe(true);
+  });
+
+  it('he hears you sprint nearby', () => {
+    const s = tech();
+    s.teachers.length = 0; // keep it about the boss
+    s.boss.pos = { x: 6.5 * TILE_SIZE, y: 3.5 * TILE_SIZE };
+    s.boss.facing = 0; // looking away, east
+    s.boss.mode = 'inspect';
+    s.boss.timer = 10;
+    s.player.pos = { x: 3.5 * TILE_SIZE, y: 3.5 * TILE_SIZE };
+    hold(s, 0.3, input({ moveX: -1, sprint: true }));
+    expect(s.boss.mode).toBe('investigate');
+    expect(s.boss.focus).toBe('noise');
+  });
+
+  it('a teacher who sees you scrapping radios Mr. Gravy, who hurries over', () => {
+    const s = tech({ ownedUpgrades: ['work-gloves'] });
+    const reports = record(s, 'teacher:report');
+    const t = s.teachers[0]!;
+    t.facing = Math.PI; // toward the panel
+    t.mode = 'teach';
+    t.timer = 60;
+    s.player.pos = { x: 3.5 * TILE_SIZE, y: 1.8 * TILE_SIZE };
+    for (let i = 0; i < 300 && reports.length === 0; i++) s.tick(1 / 60, input({ interact: true }));
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.name).toBe(t.def.name);
+    expect(t.mode).toBe('confront');
+    expect(s.boss.mode).toBe('investigate');
+    expect(s.boss.focus).toBe('report');
   });
 });

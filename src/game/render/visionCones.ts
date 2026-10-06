@@ -72,7 +72,8 @@ class FanMesh {
 
 const BOSS_COLORS: Record<BossMode, number> = {
   patrol: PALETTE.coneBoss,
-  return: PALETTE.coneBoss,
+  inspect: PALETTE.coneBoss,
+  guard: PALETTE.coneSuspicious,
   suspicious: PALETTE.coneSuspicious,
   investigate: PALETTE.coneSuspicious,
   search: PALETTE.coneSuspicious,

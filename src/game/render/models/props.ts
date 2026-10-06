@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { MaterialKit } from '../materials';
 import { PALETTE } from '../palette';
-import { gauge, metals, type ModelBuilder } from './fixtures';
+import { gauge, metals, type ModelBuilder } from './common';
 import { box, cyl, ico, part, pick, rbox, sphere, torus } from './parts';
 
 /**
@@ -241,6 +241,83 @@ export const PROP_MODELS: Record<string, ModelBuilder> = {
           g,
         );
       }
+    }
+    return g;
+  },
+
+  // 0.08 x 0.95 on the wall: a stall divider sticking out between two toilets.
+  stall: (kit) => {
+    const g = new THREE.Group();
+    const panel = kit.get(0x7e9aa6, { roughness: 0.4, metalness: 0.2 });
+    const { chrome } = metals(kit);
+    part(rbox(0.06, 1.3, 0.9, 0.02), panel, 0, 0.83, -0.04, g);
+    part(box(0.04, 0.04, 0.95), chrome, 0, 1.5, -0.03, g);
+    for (const z of [-0.3, 0.32]) part(cyl(0.02, 0.025, 0.18, 8), chrome, 0, 0.09, z, g);
+    return g;
+  },
+
+  // 0.45 x 0.45, centred: a bin (sometimes the blue recycling one).
+  'trash-can': (kit, v) => {
+    const g = new THREE.Group();
+    const color = v > 0.6 ? 0x1e88e5 : 0x546e7a;
+    part(cyl(0.2, 0.17, 0.5, 14), kit.get(color, { roughness: 0.55, flat: false }), 0, 0.25, 0, g);
+    part(torus(0.2, 0.018, 6, 18), kit.get(color, { roughness: 0.5 }), 0, 0.5, 0, g).rotation.x =
+      Math.PI / 2;
+    part(cyl(0.19, 0.19, 0.02, 14), kit.get(0x212121, { roughness: 0.8 }), 0, 0.49, 0, g);
+    return g;
+  },
+
+  // 0.96 x 0.42 on the wall: a tall bookshelf, stuffed.
+  bookshelf: (kit, v) => {
+    const g = new THREE.Group();
+    const wood = kit.get(0x8d6240, { roughness: 0.7 });
+    part(box(0.96, 1.55, 0.03), kit.get(0x6d4c35, { roughness: 0.8 }), 0, 0.78, -0.485, g);
+    for (const x of [-0.465, 0.465]) part(rbox(0.03, 1.55, 0.42, 0.01), wood, x, 0.78, -0.29, g);
+    const shelves = [0.05, 0.42, 0.79, 1.16, 1.53];
+    for (const y of shelves) part(rbox(0.96, 0.03, 0.42, 0.01), wood, 0, y, -0.29, g);
+    const colors = [0xc0392b, 0x2e86c1, 0x27ae60, 0x8e44ad, 0xf39c12, 0x16a085, 0x5d4037, 0xeceff1];
+    shelves.slice(0, 4).forEach((y, s) => {
+      let x = -0.43;
+      let k = 0;
+      while (x < 0.4) {
+        const w = 0.05 + ((k * 37 + s * 11 + Math.round(v * 13)) % 4) * 0.015;
+        const h = 0.24 + ((k * 23 + s * 7) % 5) * 0.02;
+        const book = part(
+          box(w, h, 0.3),
+          kit.get(pick(colors, v, k + s * 9), { roughness: 0.8 }),
+          x + w / 2,
+          y + 0.015 + h / 2,
+          -0.31,
+          g,
+        );
+        if ((k + s) % 7 === 6) book.rotation.z = 0.25;
+        x += w + 0.008;
+        k++;
+      }
+    });
+    return g;
+  },
+
+  // 0.98 x 0.62 on the wall: a stainless kitchen counter with pans on top.
+  counter: (kit, v) => {
+    const g = new THREE.Group();
+    const { steel, steelDark } = metals(kit);
+    part(
+      rbox(0.98, 0.82, 0.58, 0.02),
+      kit.get(0xcfd8dc, { roughness: 0.35, metalness: 0.5 }),
+      0,
+      0.41,
+      -0.2,
+      g,
+    );
+    part(rbox(0.98, 0.04, 0.62, 0.01), steel, 0, 0.84, -0.19, g);
+    for (const x of [-0.24, 0.24]) {
+      part(box(0.44, 0.004, 0.004), steelDark, x, 0.6, 0.09, g);
+      part(box(0.004, 0.62, 0.004), steelDark, x + 0.22, 0.4, 0.09, g);
+    }
+    if (v > 0.3) {
+      part(cyl(0.12, 0.11, 0.12, 14), steel, -0.22, 0.92, -0.2, g);
+      part(box(0.3, 0.02, 0.2), kit.get(0xa1887f, { roughness: 0.8 }), 0.2, 0.87, -0.15, g);
     }
     return g;
   },

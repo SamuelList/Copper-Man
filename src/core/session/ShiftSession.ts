@@ -1,13 +1,28 @@
-import { createBoss, sendBossBackToPatrol, updateBoss, type BossState } from '../ai/bossBrain';
+import {
+  createBoss,
+  sendBossBackToPatrol,
+  updateBoss,
+  type BossState,
+  type GuardSpot,
+  type PatrolPoint,
+  type Stimulus,
+} from '../ai/bossBrain';
 import type { NavContext } from '../ai/navigation';
-import { createStudent, updateStudent, type StudentState } from '../ai/studentBrain';
+import {
+  createStudent,
+  isAwake,
+  rollPersonality,
+  updateStudent,
+  type StudentState,
+} from '../ai/studentBrain';
+import { createTeacher, updateTeacher, type TeacherState } from '../ai/teacherBrain';
 import { ABILITIES } from '../content/abilities';
 import { BALANCE, TILE_SIZE } from '../content/balance';
 import { CHARACTERS } from '../content/characters';
 import { CONSUMABLES } from '../content/consumables';
 import { FIXTURES } from '../content/fixtures';
 import { emptyContents, METAL_IDS } from '../content/metals';
-import { NPCS } from '../content/npcs';
+import { NPCS, TEACHERS } from '../content/npcs';
 import { Emitter } from '../events/emitter';
 import { lightAt, roomAt } from '../level/asciiLevel';
 import { boxCenter, distanceToBox, tileBox, tileCenter, worldToTile } from '../level/grid';
@@ -20,6 +35,7 @@ import type {
   CharacterDef,
   EffectiveStats,
   SuspicionSignal,
+  TilePos,
   Vec2,
 } from '../model/types';
 import { addToBag, bagFree, bagTotal, createBag, emptyBag } from '../systems/bag';
@@ -29,11 +45,21 @@ import { steerMove, type Detour } from '../systems/movement';
 import { rollRecharge, rollYield, scrapDuration } from '../systems/scrapping';
 import { deriveStats } from '../systems/stats';
 import { detectionRate, effectiveRange } from '../systems/detection';
-import { castRay, hasLineOfSight, inCone, lineOfSight, type ViewCone } from '../systems/vision';
+import { ExploredMap, tilesInView } from '../systems/exploration';
+import { unmetRequirement } from '../systems/requirements';
+import {
+  castRay,
+  hasLineOfSight,
+  inCone,
+  lineOfSight,
+  visibilityOutline,
+  type ViewCone,
+} from '../systems/vision';
 import { addWarning, recoverHeart } from '../systems/warnings';
 import { angleTo, deg, dist, round2 } from '../util/math';
 import { createRng, type Rng } from '../util/rng';
 import { LevelGrid } from './levelGrid';
+import { guardSpots, hideSpots, patrolPoints, teacherPosts } from './npcPlaces';
 import type {
   CoworkerState,
   DoorState,
@@ -57,6 +83,8 @@ interface ActiveInteraction {
 
 const P = BALANCE.player;
 const V = BALANCE.npc.vision;
+const B = BALANCE.boss;
+const TCH = BALANCE.teacher;
 
 /**
  * Authoritative simulation of one work shift. Pure TypeScript: the renderer feeds it input and
@@ -75,11 +103,16 @@ export class ShiftSession {
   readonly player: PlayerState;
   readonly boss: BossState;
   readonly students: StudentState[];
+  readonly teachers: TeacherState[];
   readonly fixtures: FixtureState[];
   readonly doors: DoorState[];
   readonly coworker: CoworkerState;
   /** Hitbox of each van tile (interaction reach is measured from these). */
   readonly vanBoxes: Box[];
+  /** Every tile ever seen on this level (unexplored tiles render pitch black). */
+  readonly explored: ExploredMap;
+  /** Career level, for technical fixtures. */
+  readonly workerLevel: number;
 
   status: ShiftStatus = 'running';
   elapsed = 0;
@@ -103,6 +136,15 @@ export class ShiftSession {
   private pendingNoise: Vec2 | null = null;
   /** Catches left this shift that end in a talking-to (Smooth Talker). */
   private forgiveness: number;
+  private readonly patrol: PatrolPoint[];
+  private readonly guards: GuardSpot[];
+  private readonly hides: TilePos[];
+  private readonly discoveredRooms = new Set<string>();
+  private readonly newRooms: string[] = [];
+  private exploreTimer = 0;
+  private evidenceTimer = 0;
+  private hearCooldown = 0;
+  private readonly teacherNav: NavContext;
   private tally = {
     earned: 0,
     unitsSold: 0,
@@ -128,9 +170,24 @@ export class ShiftSession {
     this.inventory = { ...(config.inventory ?? {}) };
     this.bag = createBag(this.stats.bagCapacity);
 
+    this.workerLevel = config.workerLevel ?? 1;
     const nav = { cols: this.grid.cols, rows: this.grid.rows, tileSize: TILE_SIZE };
     this.bossNav = { ...nav, passable: this.grid.bossPassable };
     this.studentNav = { ...nav, passable: this.grid.studentPassable };
+    // Teachers have keys too.
+    this.teacherNav = { ...nav, passable: this.grid.bossPassable };
+    this.patrol = patrolPoints(this.level);
+    this.guards = guardSpots(this.level);
+    this.hides = hideSpots(this.level);
+    this.explored = new ExploredMap(this.level.cols, this.level.rows, config.explored);
+    for (const room of this.level.rooms) {
+      const { col, row, w, h } = room.rect;
+      let seen = false;
+      for (let r = row; r < row + h && !seen; r++) {
+        for (let c = col; c < col + w && !seen; c++) seen = this.explored.has(c, r);
+      }
+      if (seen) this.discoveredRooms.add(room.id);
+    }
 
     const spawn = this.level.playerSpawn;
     this.player = {
@@ -145,12 +202,31 @@ export class ShiftSession {
       abilityActive: 0,
       abilityCooldown: 0,
       boost: 0,
+      vel: { x: 0, y: 0 },
     };
-    this.boss = createBoss(this.level.bossRoute, TILE_SIZE);
+    this.boss = createBoss(
+      this.level.bossRoute[0] ?? this.patrol[0]?.tile ?? spawn,
+      this.patrol.length,
+      TILE_SIZE,
+      this.rng,
+    );
     this.students = this.level.studentSpawns.map((s, i) => {
       const room = roomAt(this.level, s.col, s.row);
       const area = room?.rect ?? { col: s.col - 2, row: s.row - 2, w: 5, h: 5 };
-      return createStudent(`student-${i}`, s, area, TILE_SIZE, this.rng);
+      return createStudent(`student-${i}`, s, area, TILE_SIZE, this.rng, rollPersonality(this.rng));
+    });
+    this.teachers = this.level.teacherSpawns.map((spawnTile, i) => {
+      const def = TEACHERS.all[i % TEACHERS.all.length]!;
+      const posts = teacherPosts(this.level, spawnTile);
+      return createTeacher(
+        `teacher-${i}`,
+        def,
+        posts.front,
+        posts.hall,
+        posts.lounge,
+        TILE_SIZE,
+        this.rng,
+      );
     });
     this.fixtures = this.level.fixtures.map((f) => {
       const box = this.grid.objectBoxes.get(f.id)!;
@@ -162,9 +238,15 @@ export class ShiftSession {
         pos: boxCenter(box),
         rechargeLeft: 0,
         rechargeTotal: 0,
+        noticed: false,
       };
     });
-    this.doors = this.level.doors.map((d) => ({ id: d.id, tile: d.tile, locked: d.locked }));
+    this.doors = this.level.doors.map((d) => ({
+      id: d.id,
+      tile: d.tile,
+      locked: d.locked,
+      security: d.security === true,
+    }));
     const spot = this.rng.pick(this.level.coworkerSpots);
     const spotCenter = tileCenter(TILE_SIZE, spot.col, spot.row);
     const half = TILE_SIZE * 0.4;
@@ -247,8 +329,10 @@ export class ShiftSession {
     this.updateInteraction(dt, input);
     this.updateFixtures(dt);
     this.updateSuspicion();
-    const alert = this.updateStudents(dt);
-    this.updateBoss(dt, alert);
+    this.updateExploration(dt);
+    const students = this.updateStudents(dt);
+    const report = this.updateTeachers(dt, students.tips) ?? students.report;
+    this.updateBoss(dt, report);
     if (this.status !== 'running') return;
     this.updateEscalation();
 
@@ -345,6 +429,7 @@ export class ShiftSession {
 
     if (!p.moving) {
       this.detour = null;
+      p.vel = { x: 0, y: 0 };
       return;
     }
     const speed = p.crouching
@@ -366,6 +451,7 @@ export class ShiftSession {
     // Face where you actually went (sliding along a wall turns you to run along it).
     const mdx = p.pos.x - before.x;
     const mdy = p.pos.y - before.y;
+    p.vel = { x: mdx / dt, y: mdy / dt };
     p.facing = Math.hypot(mdx, mdy) > speed * dt * 0.2 ? Math.atan2(mdy, mdx) : Math.atan2(my, mx);
   }
 
@@ -383,18 +469,24 @@ export class ShiftSession {
       if (!near(f.box)) continue;
       const ready = f.rechargeLeft <= 0;
       const room = bagFree(this.bag) > 0;
+      const unmet = unmetRequirement(f.def.requires, {
+        level: this.workerLevel,
+        gearTiers: this.stats.gearTiers,
+      });
       candidates.push({
         kind: 'fixture',
         id: f.id,
         label: f.def.name,
         verb: 'Scrap',
         duration: scrapDuration(this.character, f.def, this.stats.scrapRateMult),
-        enabled: ready && room,
-        reason: !ready
-          ? `Recharging (${Math.ceil(f.rechargeLeft)}s)`
-          : !room
-            ? 'Bag is full'
-            : undefined,
+        enabled: ready && room && !unmet,
+        reason:
+          unmet ??
+          (!ready
+            ? `Recharging (${Math.ceil(f.rechargeLeft)}s)`
+            : !room
+              ? 'Bag is full'
+              : undefined),
         pos: f.pos,
       });
     }
@@ -403,13 +495,20 @@ export class ShiftSession {
       const doorBox = tileBox(TILE_SIZE, d.tile.col, d.tile.row);
       if (!near(doorBox)) continue;
       const doorPos = boxCenter(doorBox);
+      const unmet = d.security
+        ? unmetRequirement(
+            { gear: { keys: 2 } },
+            { level: this.workerLevel, gearTiers: this.stats.gearTiers },
+          )
+        : null;
       candidates.push({
         kind: 'door',
         id: d.id,
-        label: 'Locked Door',
+        label: d.security ? 'Security Door' : 'Locked Door',
         verb: 'Unlock',
         duration: this.stats.unlockSeconds,
-        enabled: true,
+        enabled: !unmet,
+        reason: unmet ? `${unmet} (or bolt cutters)` : undefined,
         pos: doorPos,
       });
     }
@@ -542,7 +641,10 @@ export class ShiftSession {
     for (const f of this.fixtures) {
       if (f.rechargeLeft <= 0) continue;
       f.rechargeLeft = Math.max(0, f.rechargeLeft - dt);
-      if (f.rechargeLeft === 0) this.events.emit('fixture:recharged', { fixtureId: f.id });
+      if (f.rechargeLeft === 0) {
+        f.noticed = false;
+        this.events.emit('fixture:recharged', { fixtureId: f.id });
+      }
     }
   }
 
@@ -604,21 +706,78 @@ export class ShiftSession {
     };
   }
 
+  /** A student's view, shaped by their personality. Asleep: they see nothing. */
   studentCone(s: StudentState): ViewCone {
     const lvl = NPCS.student.awareness;
-    return { pos: s.pos, facing: s.facing, fov: deg(V.fovDegrees[lvl]), range: V.range[lvl] };
+    const sight = s.personality.sight;
+    return {
+      pos: s.pos,
+      facing: s.facing,
+      fov: deg(V.fovDegrees[lvl] * sight.fovMult),
+      range: isAwake(s) ? V.range[lvl] * sight.rangeMult : 0,
+    };
   }
 
-  private updateStudents(dt: number): Vec2 | null {
-    let alert: Vec2 | null = null;
-    const fillRate = V.fillRate[NPCS.student.awareness];
+  teacherCone(t: TeacherState): ViewCone {
+    return { pos: t.pos, facing: t.facing, fov: deg(TCH.fovDegrees), range: TCH.visionRange };
+  }
+
+  roomIdAt(pos: Vec2): string | null {
+    const t = worldToTile(TILE_SIZE, pos.x, pos.y);
+    return roomAt(this.level, t.col, t.row)?.id ?? null;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Exploration
+  // ---------------------------------------------------------------------------------------------
+
+  /** Add what the worker can see to the remembered map; first sight of a room earns XP. */
+  private updateExploration(dt: number) {
+    this.exploreTimer -= dt;
+    if (this.exploreTimer > 0) return;
+    this.exploreTimer = BALANCE.explore.sampleSeconds;
+    const outline = visibilityOutline(
+      this.grid,
+      this.grid.sightCorners,
+      this.player.pos,
+      P.sightRange,
+    );
+    for (const t of tilesInView(outline, this.grid)) {
+      if (!this.explored.mark(t.col, t.row)) continue;
+      const room = roomAt(this.level, t.col, t.row);
+      if (!room || this.discoveredRooms.has(room.id)) continue;
+      this.discoveredRooms.add(room.id);
+      if (room.kind === 'exterior') continue;
+      this.newRooms.push(room.name);
+      this.events.emit('room:discovered', { roomId: room.id, name: room.name });
+      this.gainXp(BALANCE.xp.newRoom, 'Exploring');
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // NPCs
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Students watch for scrapping (some also for a full bag). A snitch becomes a report for the
+   * boss; a teacher's pet also tips off nearby teachers.
+   */
+  private updateStudents(dt: number): { report: Stimulus | null; tips: Vec2[] } {
+    let report: Stimulus | null = null;
+    const tips: Vec2[] = [];
+    const baseFill = V.fillRate[NPCS.student.awareness];
     const tuning = { walkSpeed: BALANCE.npc.walkSpeed[NPCS.student.speed] };
     for (const s of this.students) {
-      // Students snitch on scrapping, not on someone walking by with a bag.
-      const seen = this.suspicion.scrapping
-        ? this.perceive(this.studentCone(s), fillRate, { carrying: false, scrapping: true })
+      const p = s.personality;
+      const watching =
+        this.suspicion.scrapping || (p.snitchesOnCarrying && this.suspicion.carrying);
+      const seen = watching
+        ? this.perceive(this.studentCone(s), baseFill * p.sight.fillMult, {
+            carrying: p.snitchesOnCarrying && this.suspicion.carrying,
+            scrapping: this.suspicion.scrapping,
+          })
         : { sees: false, rate: 0 };
-      const shouted = updateStudent(s, {
+      const outcome = updateStudent(s, {
         dt,
         nav: this.studentNav,
         sees: seen.sees,
@@ -628,35 +787,116 @@ export class ShiftSession {
         rng: this.rng,
         tuning,
       });
-      if (shouted) {
-        alert = { ...this.player.pos };
-        this.events.emit('student:alert', { studentId: s.id, pos: alert });
+      if (outcome === 'snitch') {
+        const pos = { ...this.player.pos };
+        report = { kind: 'report', pos };
+        if (p.tellsTeachers) tips.push(pos);
+        this.events.emit('student:alert', { studentId: s.id, personality: p.name, pos });
+      } else if (outcome === 'laugh') {
+        this.events.emit('student:laughed', { studentId: s.id, personality: p.name });
       }
     }
-    return alert;
+    return { report, tips };
   }
 
-  private updateBoss(dt: number, alert: Vec2 | null) {
+  /** Teachers notice scrapping and carrying; when sure, they radio Mr. Gravy. */
+  private updateTeachers(dt: number, tips: Vec2[]): Stimulus | null {
+    let report: Stimulus | null = null;
+    const reach = TCH.petReachTiles * TILE_SIZE;
+    for (const t of this.teachers) {
+      const seen = this.isSuspicious
+        ? this.perceive(this.teacherCone(t), TCH.fillRate * t.def.strictness, this.suspicion)
+        : { sees: false, rate: 0 };
+      const tip = tips.find((pos) => dist(pos, t.pos) <= reach) ?? null;
+      const outcome = updateTeacher(t, {
+        dt,
+        nav: this.teacherNav,
+        rng: this.rng,
+        sees: seen.sees,
+        rate: seen.rate,
+        decay: V.decayRate * this.stats.decayMult,
+        playerPos: this.player.pos,
+        tip,
+      });
+      if (outcome === 'report') {
+        const pos = { ...this.player.pos };
+        report = { kind: 'report', pos };
+        this.events.emit('teacher:report', { teacherId: t.id, name: t.def.name, pos });
+      }
+    }
+    return report;
+  }
+
+  /** Sprinting is loud: he hears it nearby (less through walls). */
+  private heardSprint(dt: number): Stimulus | null {
+    this.hearCooldown = Math.max(0, this.hearCooldown - dt);
+    const p = this.player;
+    if (!p.sprinting || this.hearCooldown > 0) return null;
+    const through = hasLineOfSight(this.grid, this.boss.pos, p.pos) ? 1 : 0.5;
+    const range = B.hearSprintTiles * TILE_SIZE * through * this.stats.noticeMult;
+    if (dist(this.boss.pos, p.pos) > range) return null;
+    this.hearCooldown = B.hearCooldownSeconds;
+    return { kind: 'noise', pos: { ...p.pos } };
+  }
+
+  /** On his rounds he notices fixtures that have been stripped. */
+  private spotEvidence(dt: number): { stimulus: Stimulus; name: string } | null {
+    this.evidenceTimer -= dt;
+    if (this.evidenceTimer > 0) return null;
+    this.evidenceTimer = 0.25;
+    const mode = this.boss.mode;
+    if (mode !== 'patrol' && mode !== 'inspect' && mode !== 'guard' && mode !== 'search') {
+      return null;
+    }
+    const cone = this.bossCone();
+    const range = cone.range * B.evidenceRangeMult;
+    for (const f of this.fixtures) {
+      if (f.rechargeLeft <= 0 || f.noticed) continue;
+      if (dist(cone.pos, f.pos) > range) continue;
+      if (!inCone({ ...cone, range }, f.pos) || !hasLineOfSight(this.grid, cone.pos, f.pos))
+        continue;
+      f.noticed = true;
+      return { stimulus: { kind: 'evidence', pos: { ...f.pos } }, name: f.def.name };
+    }
+    return null;
+  }
+
+  private updateBoss(dt: number, report: Stimulus | null) {
     const seen = this.isSuspicious
       ? this.perceive(this.bossCone(), V.fillRate[NPCS.boss.awareness], this.suspicion)
       : { sees: false, rate: 0 };
-    // A whoopee cushion counts as something to check out (unless a student already shouted).
-    alert = alert ?? this.pendingNoise;
+    // Strongest stimulus wins: a report, then something he found, then a noise.
+    const evidence = this.spotEvidence(dt);
+    const noise = this.pendingNoise ? { kind: 'noise' as const, pos: this.pendingNoise } : null;
     this.pendingNoise = null;
+    const stimulus = report ?? evidence?.stimulus ?? noise ?? this.heardSprint(dt);
     const result = updateBoss(this.boss, {
       dt,
+      now: this.elapsed,
       nav: this.bossNav,
-      route: this.level.bossRoute,
+      rng: this.rng,
+      points: this.patrol,
+      guardSpots: this.guards,
+      hideSpots: this.hides,
+      roomAt: (pos) => this.roomIdAt(pos),
       sees: seen.sees,
       rate: seen.rate,
       playerPos: this.player.pos,
-      alert,
+      playerVel: this.player.vel,
+      stimulus,
       decay: V.decayRate * this.stats.decayMult,
       speedMult: bossSpeedMult(this.escalationInput()),
       tuning: { walkSpeed: BALANCE.npc.walkSpeed[NPCS.boss.speed] },
     });
     if (result.modeChanged) {
       this.events.emit('boss:mode', { mode: this.boss.mode, previous: result.previousMode });
+    }
+    if (result.remark) {
+      this.events.emit('boss:remark', {
+        remark: result.remark,
+        pos: { ...this.boss.pos },
+        detail: result.remark === 'evidence' ? evidence?.name : undefined,
+      });
     }
 
     // The boss has keys: walking through a locked door opens it.
@@ -736,6 +976,7 @@ export class ShiftSession {
       if (s.timesCaught === 0) this.gainXp(BALANCE.xp.cleanShift, 'Never caught');
     }
     this.summary = {
+      levelId: this.level.id,
       day: this.day,
       endedBy: reason,
       fired: reason === 'fired',
@@ -751,6 +992,9 @@ export class ShiftSession {
       xp: s.xp.map((l) => ({ ...l })),
       xpTotal: this.xpEarned,
       inventory: { ...this.inventory },
+      explored: this.explored.encode(),
+      exploredFraction: this.explored.fraction,
+      roomsDiscovered: [...this.newRooms],
     };
     this.events.emit('shift:ended', this.summary);
   }
@@ -762,7 +1006,11 @@ export class ShiftSession {
   /** Highest detection level among NPCs currently interested in the player. */
   private detectionLevel(): number {
     const bossLevel = this.boss.mode === 'chase' ? 1 : this.boss.detection;
-    return Math.max(bossLevel, ...this.students.map((s) => s.detection));
+    return Math.max(
+      bossLevel,
+      ...this.students.map((s) => s.detection),
+      ...this.teachers.map((t) => (t.mode === 'confront' ? 1 : t.detection)),
+    );
   }
 
   getSnapshot(): ShiftSnapshot {

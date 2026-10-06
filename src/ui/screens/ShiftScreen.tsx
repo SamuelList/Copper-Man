@@ -61,6 +61,8 @@ export function ShiftScreen() {
       ownedUpgrades: [...career.ownedUpgrades],
       skills: [...career.skills],
       inventory: { ...career.inventory },
+      workerLevel: career.level,
+      explored: career.explored[DEFAULT_LEVEL_ID],
       day: career.day,
       warnings: career.warnings,
       seed: randomSeed(),

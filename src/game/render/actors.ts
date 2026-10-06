@@ -118,20 +118,25 @@ export class ActorView {
 }
 
 /** "!" / "?" above an NPC's head. */
+export type IconKind = '' | '!' | '?' | 'z';
+
 export class StatusIcon {
   private readonly alert = textSprite('!', '#ff5252');
   private readonly curious = textSprite('?', '#ffeb3b');
+  private readonly sleep = textSprite('z', '#b39ddb', 0.4, '#311b92');
   readonly group = new THREE.Group();
 
   constructor(scene: THREE.Scene) {
-    this.group.add(this.alert, this.curious);
+    this.group.add(this.alert, this.curious, this.sleep);
     scene.add(this.group);
   }
 
-  sync(pos: Vec2, icon: '' | '!' | '?', height: number, time: number, visible: boolean) {
+  sync(pos: Vec2, icon: IconKind, height: number, time: number, visible: boolean) {
     this.alert.visible = visible && icon === '!';
     this.curious.visible = visible && icon === '?';
-    this.group.position.set(toWorld(pos.x), height + Math.sin(time * 6) * 0.05, toWorld(pos.y));
+    this.sleep.visible = visible && icon === 'z';
+    const bob = icon === 'z' ? Math.sin(time * 2) * 0.1 : Math.sin(time * 6) * 0.05;
+    this.group.position.set(toWorld(pos.x), height + bob, toWorld(pos.y));
   }
 }
 
