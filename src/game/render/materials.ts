@@ -54,8 +54,10 @@ const FRAGMENT_BODY = /* glsl */ `
 // its own room's light and visibility.
 vec2 copperSample = vMapPos + vMapNormal * 0.55;
 vec2 copperUv = vec2( copperSample.x / uMapSize.x, 1.0 - copperSample.y / uMapSize.y );
-float copperLight = texture2D( uLightMap, copperUv ).r;
-float copperSeen = mix( 1.0, texture2D( uFogMap, copperUv ).r, uFogOn );
+// Beyond the map edge (the grass verge) is plain daylight, never fogged.
+float copperInside = step( 0.0, copperUv.x ) * step( copperUv.x, 1.0 ) * step( 0.0, copperUv.y ) * step( copperUv.y, 1.0 );
+float copperLight = mix( 1.0, texture2D( uLightMap, copperUv ).r, copperInside );
+float copperSeen = mix( 1.0, texture2D( uFogMap, copperUv ).r, uFogOn * copperInside );
 // Out of sight: darker and washed out, like a half-remembered room.
 vec3 copperGrey = vec3( dot( gl_FragColor.rgb, vec3( 0.299, 0.587, 0.114 ) ) );
 gl_FragColor.rgb = mix( copperGrey, gl_FragColor.rgb, mix( 0.35, 1.0, copperSeen ) );
@@ -75,26 +77,77 @@ export function shadeWithWorld<T extends THREE.Material>(material: T, shading: W
   return material;
 }
 
+export interface MaterialOptions {
+  roughness?: number;
+  metalness?: number;
+  emissive?: number;
+  /** Faceted low-poly look (default). Turn off for smooth curved surfaces like porcelain. */
+  flat?: boolean;
+  /** Below 1 makes the material see-through (glass). */
+  opacity?: number;
+  /** A texture painted onto the surface (labels, chalkboards, posters). */
+  map?: THREE.Texture;
+}
+
 /**
- * Cache of flat-shaded low-poly materials keyed by colour, all wired to the world shading.
- * Sharing materials keeps draw state small and lets the whole scene dispose in one pass.
+ * Cache of low-poly materials keyed by their options, all wired to the world shading. Sharing
+ * materials keeps draw state small, lets the world batch geometry per material, and lets the
+ * whole scene dispose in one pass.
  */
 export class MaterialKit {
   private cache = new Map<string, THREE.MeshStandardMaterial>();
 
   constructor(readonly shading: WorldShading) {}
 
-  get(color: number, opts: { roughness?: number; metalness?: number; emissive?: number } = {}) {
-    const key = `${color}:${opts.roughness ?? 0.85}:${opts.metalness ?? 0}:${opts.emissive ?? 0}`;
+  get(color: number, opts: MaterialOptions = {}) {
+    const key = [
+      color,
+      opts.roughness ?? 0.85,
+      opts.metalness ?? 0,
+      opts.emissive ?? 0,
+      opts.flat ?? true,
+      opts.opacity ?? 1,
+      opts.map?.uuid ?? '',
+    ].join(':');
     let m = this.cache.get(key);
     if (!m) {
+      const opacity = opts.opacity ?? 1;
       m = shadeWithWorld(
         new THREE.MeshStandardMaterial({
           color,
           roughness: opts.roughness ?? 0.85,
           metalness: opts.metalness ?? 0,
           emissive: opts.emissive ?? 0x000000,
-          flatShading: true,
+          flatShading: opts.flat ?? true,
+          transparent: opacity < 1,
+          opacity,
+          depthWrite: opacity >= 1,
+          map: opts.map ?? null,
+        }),
+        this.shading,
+      );
+      m.userData.kit = { opacity, emissive: opts.emissive ?? 0, map: !!opts.map };
+      this.cache.set(key, m);
+    }
+    return m;
+  }
+
+  /**
+   * A white material that takes its colour from vertex colours. The static batcher folds every
+   * plain kit material with similar roughness/metalness into one of these, so a chunk of the
+   * school draws in a handful of calls instead of one per colour.
+   */
+  vertexColored(roughness: number, metalness: number, flat: boolean) {
+    const key = `vc:${roughness}:${metalness}:${flat}`;
+    let m = this.cache.get(key);
+    if (!m) {
+      m = shadeWithWorld(
+        new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          vertexColors: true,
+          roughness,
+          metalness,
+          flatShading: flat,
         }),
         this.shading,
       );

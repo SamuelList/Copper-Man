@@ -5,6 +5,7 @@ import type { ShiftConfig, ShiftSummary } from '@core/session/types';
 import { bagTotal } from '@core/systems/bag';
 import { useShiftStore } from '@state/shiftStore';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { connectSession, type SessionBridge } from './bridge';
 import { InputController } from './input/InputController';
 import {
@@ -17,10 +18,17 @@ import {
 import { toWorld } from './render/coords';
 import { FogOfWar } from './render/fogOfWar';
 import { IsoCamera } from './render/isoCamera';
-import { Dial, DustPuffs, floorRing, Sparks, textSprite } from './render/markers';
+import { Dial, DustPuffs, floorRing, PopFx, Sparks, textSprite } from './render/markers';
 import { createWorldShading, MaterialKit } from './render/materials';
-import { buildBoss, buildStudent, buildWorker, disposeModelCache } from './render/models';
+import {
+  buildBoss,
+  buildStudent,
+  buildWorker,
+  disposeModelCache,
+  disposeTextureCache,
+} from './render/models';
 import { PALETTE, STUDENT_SHIRTS } from './render/palette';
+import { QualityGovernor } from './render/quality';
 import { VisionCone } from './render/visionCones';
 import { buildWorld, type World } from './render/world';
 
@@ -71,9 +79,12 @@ export class GameEngine {
   private readonly zzz = textSprite('z Z z', '#d1c4e9', 0.45, '#311b92');
   private readonly sparks = new Sparks();
   private readonly dust = new DustPuffs();
+  private readonly pops = new PopFx();
+  private readonly envMap: THREE.Texture;
   private readonly resizeObserver: ResizeObserver;
   private frame = 0;
   private last = performance.now();
+  private readonly quality = new QualityGovernor(window.devicePixelRatio);
   private accumulator = 0;
   private pendingAbility = false;
   private pendingUse: string | null = null;
@@ -91,7 +102,7 @@ export class GameEngine {
       antialias: true,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(this.quality.current.ratio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -100,6 +111,12 @@ export class GameEngine {
     this.renderer.domElement.style.display = 'block';
     host.appendChild(this.renderer.domElement);
     this.scene.background = new THREE.Color(PALETTE.background);
+    // Soft studio reflections so metal, chrome and glass read as shiny.
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    this.scene.environment = this.envMap;
+    this.scene.environmentIntensity = 0.5;
 
     const shading = createWorldShading(level.cols, level.rows);
     this.kit = new MaterialKit(shading);
@@ -132,7 +149,9 @@ export class GameEngine {
       this.zzz,
       this.sparks.points,
       this.dust.group,
+      this.pops.group,
     );
+    this.listenForGadgets();
 
     this.bridge = connectSession(this.session, (summary) => {
       this.endTimer = window.setTimeout(() => params.onEnd(summary), END_DELAY_MS);
@@ -173,6 +192,32 @@ export class GameEngine {
     };
   }
 
+  /** Comic feedback for gadgets: a "PFFT!" where the cushion lands, a "GLUG!", a "SNIP!". */
+  private listenForGadgets() {
+    const events = this.session.events;
+    events.on('noise:made', ({ pos }) => {
+      this.pops.pop('PFFT!', '#c5e1a5', 0x9ccc65, toWorld(pos.x), toWorld(pos.y));
+    });
+    events.on('gadget:used', ({ id, pos }) => {
+      const x = toWorld(pos.x);
+      const z = toWorld(pos.y);
+      if (id === 'energy-drink') this.pops.pop('GLUG!', '#80deea', 0x4dd0e1, x, z);
+      if (id === 'bolt-cutters') {
+        this.pops.pop('SNIP!', '#ffcc80', 0xffb74d, x, z);
+        this.sparks.emit(x, 0.6, z, 14);
+      }
+    });
+  }
+
+  /** Dynamic quality: render less when the device can't keep up (see QualityGovernor). */
+  private applyQuality() {
+    const q = this.quality.current;
+    this.renderer.setPixelRatio(q.ratio);
+    this.scene.environment = q.reflections ? this.envMap : null;
+    this.world.setShadows(q.shadows);
+    this.resize();
+  }
+
   private onBlur = () => {
     if (this.session.status === 'running') useShiftStore.getState().setPaused(true);
   };
@@ -187,8 +232,10 @@ export class GameEngine {
   private loop = (now: number) => {
     if (this.destroyed) return;
     this.frame = requestAnimationFrame(this.loop);
-    const dt = Math.min(0.25, (now - this.last) / 1000);
+    const raw = (now - this.last) / 1000;
+    const dt = Math.min(0.25, raw);
     this.last = now;
+    if (this.quality.sample(raw) !== null) this.applyQuality();
 
     const store = useShiftStore.getState();
     if (this.input.pausePressed() && this.session.status === 'running') store.togglePause();
@@ -291,6 +338,9 @@ export class GameEngine {
     }
     this.sparks.update(dt);
     this.dust.update(dt);
+    this.pops.update(dt);
+    // Energy drink: a fizzy trail while it lasts.
+    if (p.boost > 0 && p.moving && Math.random() < dt * 20) this.dust.emit(px, pz, 0.3, 0x80deea);
 
     for (const f of s.fixtures) {
       let dial = this.recharge.get(f.id);
@@ -323,8 +373,9 @@ export class GameEngine {
       toWorld(cw.pos.y),
     );
 
-    // Camera, cutaway, fog.
+    // Camera, cutaway, shadows, fog.
     this.iso.follow(px, pz, dt);
+    this.world.update(px, pz, time);
     this.world.walls.update(px, pz, this.iso.toCamera, this.iso.screenRight, dt);
     this.fog.update(s);
 
@@ -394,6 +445,8 @@ export class GameEngine {
       }
     });
     disposeModelCache();
+    disposeTextureCache();
+    this.envMap.dispose();
     this.kit.dispose();
     this.fog.dispose();
     this.world.floorTexture.dispose();

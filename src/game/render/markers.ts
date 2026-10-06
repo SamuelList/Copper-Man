@@ -217,12 +217,13 @@ export class DustPuffs {
     }
   }
 
-  emit(x: number, z: number, strength: number) {
+  emit(x: number, z: number, strength: number, color = 0xd8cfc0) {
     const n = 2 + Math.round(strength * 2);
     for (let k = 0; k < n; k++) {
       const i = this.next;
       this.next = (this.next + 1) % this.sprites.length;
       const s = this.sprites[i]!;
+      (s.material as THREE.SpriteMaterial).color.setHex(color);
       s.position.set(x + (Math.random() - 0.5) * 0.12, 0.05, z + (Math.random() - 0.5) * 0.12);
       s.scale.setScalar(0.12);
       s.visible = true;
@@ -242,6 +243,46 @@ export class DustPuffs {
       s.scale.setScalar(0.12 + (1 - t) * 0.32);
       (s.material as THREE.SpriteMaterial).opacity = t * 0.45;
       s.visible = t > 0;
+    }
+  }
+}
+
+/** Comic pop-ups for gadgets: a word that bounces up and fades over an expanding floor ring. */
+export class PopFx {
+  readonly group = new THREE.Group();
+  private readonly active: { sprite: THREE.Sprite; ring: THREE.Mesh; age: number }[] = [];
+
+  pop(word: string, color: string, ringColor: number, x: number, z: number) {
+    const sprite = textSprite(word, color, 0.5, '#1b1b1b');
+    sprite.position.set(x, 0.9, z);
+    const ring = floorRing(0.2, 0.3, ringColor, true);
+    ring.position.set(x, 0.05, z);
+    this.group.add(sprite, ring);
+    this.active.push({ sprite, ring, age: 0 });
+  }
+
+  update(dt: number) {
+    for (let i = this.active.length - 1; i >= 0; i--) {
+      const fx = this.active[i]!;
+      fx.age += dt;
+      const t = fx.age / 1.3;
+      if (t >= 1) {
+        this.group.remove(fx.sprite, fx.ring);
+        fx.sprite.material.map?.dispose();
+        fx.sprite.material.dispose();
+        fx.ring.geometry.dispose();
+        (fx.ring.material as THREE.Material).dispose();
+        this.active.splice(i, 1);
+        continue;
+      }
+      // Overshoot pop, then drift up and fade.
+      const pop =
+        t < 0.15 ? t / 0.15 : 1 + Math.sin(Math.min(1, (t - 0.15) / 0.2) * Math.PI) * 0.15;
+      fx.sprite.scale.set(pop, pop * 0.5, 1);
+      fx.sprite.position.y = 0.9 + t * 0.5;
+      fx.sprite.material.opacity = 1 - Math.max(0, (t - 0.6) / 0.4);
+      fx.ring.scale.setScalar(1 + t * 5);
+      (fx.ring.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.7;
     }
   }
 }
