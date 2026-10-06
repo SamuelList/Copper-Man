@@ -1,3 +1,4 @@
+import { TILE_SIZE } from '@core/content/balance';
 import { CHARACTERS } from '@core/content/characters';
 import { ShiftSession } from '@core/session/ShiftSession';
 import type { ShiftConfig, ShiftSummary } from '@core/session/types';
@@ -6,11 +7,17 @@ import { useShiftStore } from '@state/shiftStore';
 import * as THREE from 'three';
 import { connectSession, type SessionBridge } from './bridge';
 import { InputController } from './input/InputController';
-import { ActorView, LastSeenGhost, StatusIcon } from './render/actors';
+import {
+  ActorView,
+  LastSeenGhost,
+  StatusIcon,
+  type ActorPose,
+  type Footfall,
+} from './render/actors';
 import { toWorld } from './render/coords';
 import { FogOfWar } from './render/fogOfWar';
 import { IsoCamera } from './render/isoCamera';
-import { Dial, floorRing, Sparks, textSprite } from './render/markers';
+import { Dial, DustPuffs, floorRing, Sparks, textSprite } from './render/markers';
 import { createWorldShading, MaterialKit } from './render/materials';
 import { buildBoss, buildStudent, buildWorker, disposeModelCache } from './render/models';
 import { PALETTE, STUDENT_SHIRTS } from './render/palette';
@@ -63,6 +70,7 @@ export class GameEngine {
   private readonly recharge = new Map<string, Dial>();
   private readonly zzz = textSprite('z Z z', '#d1c4e9', 0.45, '#311b92');
   private readonly sparks = new Sparks();
+  private readonly dust = new DustPuffs();
   private readonly resizeObserver: ResizeObserver;
   private frame = 0;
   private last = performance.now();
@@ -99,7 +107,7 @@ export class GameEngine {
     shading.uFogMap.value = this.fog.texture;
 
     const character = CHARACTERS.get(this.session.character.id);
-    this.player = new ActorView(buildWorker(this.kit, character.color, true), this.scene);
+    this.player = new ActorView(buildWorker(this.kit, character.color), this.scene);
     this.boss = this.npcViews(
       new ActorView(buildBoss(this.kit), this.scene),
       PALETTE.ghostBoss,
@@ -116,7 +124,13 @@ export class GameEngine {
       ),
     );
 
-    this.scene.add(this.focusRing, this.progress.sprite, this.zzz, this.sparks.points);
+    this.scene.add(
+      this.focusRing,
+      this.progress.sprite,
+      this.zzz,
+      this.sparks.points,
+      this.dust.group,
+    );
 
     this.bridge = connectSession(this.session, (summary) => {
       this.endTimer = window.setTimeout(() => params.onEnd(summary), END_DELAY_MS);
@@ -205,7 +219,18 @@ export class GameEngine {
     const pz = toWorld(p.pos.y);
 
     // Player.
-    this.player.sync(p, dt);
+    this.kickUpDust(
+      this.player.sync(
+        {
+          pos: p.pos,
+          facing: p.facing,
+          running: p.sprinting,
+          crouching: p.crouching,
+          working: !!s.interaction,
+        },
+        dt,
+      ),
+    );
     const carrying = bagTotal(s.bag) > 0;
     if (this.player.model.sack) this.player.model.sack.visible = carrying;
     const blink = p.grace > 0 ? (Math.floor(time * 8) % 2 === 0 ? 0.35 : 0.9) : 1;
@@ -224,7 +249,7 @@ export class GameEngine {
       boss.mode === 'chase' ? '!' : boss.mode === 'patrol' || boss.mode === 'return' ? '' : '?';
     this.syncNpc(
       this.boss,
-      { pos: boss.pos, facing: boss.facing, moving: boss.path.length > 0 },
+      { pos: boss.pos, facing: boss.facing, running: boss.mode === 'chase' },
       s.bossCone(),
       VisionCone.bossColor(boss.mode),
       bossIcon,
@@ -237,7 +262,7 @@ export class GameEngine {
       const color = st.mode === 'alarmed' ? PALETTE.coneChase : PALETTE.coneStudent;
       this.syncNpc(
         this.students[i]!,
-        { pos: st.pos, facing: st.facing, moving: st.mode === 'wander' },
+        { pos: st.pos, facing: st.facing },
         s.studentCone(st),
         color,
         icon,
@@ -266,6 +291,7 @@ export class GameEngine {
       }
     }
     this.sparks.update(dt);
+    this.dust.update(dt);
 
     for (const f of s.fixtures) {
       let dial = this.recharge.get(f.id);
@@ -306,9 +332,18 @@ export class GameEngine {
     this.renderer.render(this.scene, this.iso.camera);
   }
 
+  /** Running feet kick up dust (only where you can see it). */
+  private kickUpDust(footfalls: Footfall[]) {
+    for (const f of footfalls) {
+      if (f.run < 0.4) continue;
+      if (!this.session.isVisibleToPlayer({ x: f.x * TILE_SIZE, y: f.z * TILE_SIZE })) continue;
+      this.dust.emit(f.x, f.z, f.run);
+    }
+  }
+
   private syncNpc(
     v: NpcViews,
-    pose: { pos: { x: number; y: number }; facing: number; moving: boolean },
+    pose: ActorPose,
     cone: Parameters<VisionCone['update']>[2],
     coneColor: number,
     icon: '' | '!' | '?',
@@ -318,7 +353,8 @@ export class GameEngine {
   ) {
     const s = this.session;
     const visible = s.isVisibleToPlayer(pose.pos);
-    v.actor.sync(pose, dt);
+    const footfalls = v.actor.sync(pose, dt);
+    if (visible) this.kickUpDust(footfalls);
     v.actor.root.visible = visible;
     v.cone.group.visible = visible;
     if (visible) v.cone.update(s.grid, s.grid.sightCorners, cone, coneColor, 1);

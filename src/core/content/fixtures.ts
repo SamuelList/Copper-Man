@@ -2,8 +2,10 @@ import type { FixtureDef } from '../model/types';
 import { createRegistry } from './registry';
 
 /**
- * Strippable fixtures. Yields/recharge come from the design board; metals and the names of
- * the two unnamed "(name)" fixtures (Pneumatic Air Line, Radiator) are assumptions.
+ * Strippable fixtures. Yields/recharge come from the design board; metals and the names of the
+ * two unnamed "(name)" fixtures (Pneumatic Air Line, Radiator) are assumptions.
+ * `footprint` is each object's real size on the floor (its hitbox); the 3D models in
+ * game/render/models.ts are built to the same dimensions.
  */
 export const FIXTURES = createRegistry<FixtureDef>('fixture', [
   {
@@ -17,6 +19,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 3,
     risk: 'very high',
     cover: 'low',
+    footprint: { w: 0.8, d: 0.8, anchor: 'center' },
     color: 0xd9822b,
   },
   {
@@ -30,6 +33,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 4,
     risk: 'high',
     cover: 'low',
+    footprint: { w: 0.55, d: 0.46, anchor: 'wall' },
     color: 0x90caf9,
   },
   {
@@ -43,6 +47,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 4,
     risk: 'high',
     cover: 'low',
+    footprint: { w: 0.85, d: 0.31, anchor: 'wall' },
     color: 0xff7043,
   },
   {
@@ -56,6 +61,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 4,
     risk: 'high',
     cover: 'none',
+    footprint: { w: 0.5, d: 0.23, anchor: 'wall' },
     color: 0x80cbc4,
   },
   {
@@ -69,6 +75,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 4,
     risk: 'medium',
     cover: 'low',
+    footprint: { w: 0.9, d: 0.27, anchor: 'wall' },
     color: 0xbcaaa4,
   },
   {
@@ -82,6 +89,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 3,
     risk: 'medium',
     cover: 'low',
+    footprint: { w: 0.5, d: 0.68, anchor: 'wall' },
     color: 0xeceff1,
   },
   {
@@ -95,6 +103,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 3,
     risk: 'low',
     cover: 'low',
+    footprint: { w: 0.7, d: 0.65, anchor: 'wall' },
     color: 0x78909c,
   },
   {
@@ -108,6 +117,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 2,
     risk: 'low',
     cover: 'none',
+    footprint: { w: 0.6, d: 0.45, anchor: 'center' },
     color: 0xfff176,
   },
   {
@@ -121,6 +131,7 @@ export const FIXTURES = createRegistry<FixtureDef>('fixture', [
     workSeconds: 2.5,
     risk: 'low',
     cover: 'low',
+    footprint: { w: 0.7, d: 0.8, anchor: 'center' },
     color: 0x8d6e63,
   },
 ]);

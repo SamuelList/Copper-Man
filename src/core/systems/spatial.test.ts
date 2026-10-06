@@ -2,6 +2,8 @@ import { TILE_SIZE } from '../content/balance';
 import { center, testGrid } from '../test/helpers';
 import { moveWithCollision } from './movement';
 import { findPath } from './pathfinding';
+import { footprintBox } from '../level/footprint';
+import { distanceToBox } from '../level/grid';
 import { detectionRate, effectiveRange } from './detection';
 import {
   canSee,
@@ -123,13 +125,13 @@ describe('pathfinding', () => {
 
 describe('movement', () => {
   const grid = testGrid(MAP);
-  const r = TILE_SIZE * 0.3;
+  const r = TILE_SIZE * 0.22;
 
-  it('slides along walls instead of passing through', () => {
+  it('stops at walls instead of passing through', () => {
     const start = center(3, 1);
     const end = moveWithCollision(grid, start, r, 200, 0);
-    expect(end.x + r).toBeLessThanOrEqual(4 * TILE_SIZE);
-    expect(end.y).toBe(start.y);
+    expect(end.x + r).toBeLessThanOrEqual(4 * TILE_SIZE + 0.5);
+    expect(end.y).toBeCloseTo(start.y);
   });
 
   it('moves freely in open space', () => {
@@ -137,5 +139,67 @@ describe('movement', () => {
     const end = moveWithCollision(grid, start, r, 10, -5);
     expect(end.x).toBeCloseTo(start.x + 10);
     expect(end.y).toBeCloseTo(start.y - 5);
+  });
+
+  it('runs down a hallway at full speed when pushing diagonally into the wall', () => {
+    const hall = testGrid(['############', '#1........P#', '#2.........#', '############']);
+    const start = { x: 2.5 * TILE_SIZE, y: 1.3 * TILE_SIZE };
+    // Up-right (45° into the north wall): should carry along the wall at the full step length.
+    let p = start;
+    for (let i = 0; i < 20; i++)
+      p = moveWithCollision(hall, p, r, 3 * Math.SQRT1_2, -3 * Math.SQRT1_2);
+    expect(p.x - start.x).toBeGreaterThan(20 * 3 * 0.95);
+    expect(p.y - r).toBeGreaterThanOrEqual(TILE_SIZE - 0.5); // never inside the wall
+  });
+
+  it('rounds corners instead of snagging on them', () => {
+    // Graze the bottom corner of the dividing wall (col 4, rows 1-2) while heading east
+    // through the gap: the round body is nudged past instead of stopping dead.
+    let p = { x: 3.5 * TILE_SIZE, y: 3.15 * TILE_SIZE };
+    for (let i = 0; i < 30; i++) p = moveWithCollision(grid, p, r, 2, 0.2);
+    expect(p.x).toBeGreaterThan(5 * TILE_SIZE);
+  });
+
+  it('does not tunnel through thin objects on a huge step', () => {
+    // The air line at (3,2) has no wall to back onto, so it sits centred on its tile.
+    const level = testGrid(['#######', '#P....#', '#..A..#', '#1...2#', '#######']);
+    const start = { x: 3.5 * TILE_SIZE, y: 1.4 * TILE_SIZE };
+    const end = moveWithCollision(level, start, r, 0, TILE_SIZE * 3, false);
+    const box = level.solidBoxesAt(3, 2)[0]!;
+    expect(end.y + r).toBeLessThanOrEqual(box.minY + 0.5);
+  });
+});
+
+describe('footprints', () => {
+  const ts = TILE_SIZE;
+  const fp = { w: 0.5, d: 0.25, anchor: 'wall' as const };
+
+  it('places wall-anchored objects flush against the wall they back onto', () => {
+    expect(footprintBox(fp, 2, 2, 'north', ts)).toEqual({
+      minX: 2.25 * ts,
+      maxX: 2.75 * ts,
+      minY: 2 * ts,
+      maxY: 2.25 * ts,
+    });
+    expect(footprintBox(fp, 2, 2, 'south', ts).maxY).toBe(3 * ts);
+    expect(footprintBox(fp, 2, 2, 'west', ts)).toEqual({
+      minX: 2 * ts,
+      maxX: 2.25 * ts,
+      minY: 2.25 * ts,
+      maxY: 2.75 * ts,
+    });
+    expect(footprintBox(fp, 2, 2, 'east', ts).maxX).toBe(3 * ts);
+  });
+
+  it('centres free-standing objects, and wall objects with no wall', () => {
+    const box = footprintBox({ w: 0.5, d: 0.5, anchor: 'center' }, 1, 1, 'north', ts);
+    expect(box).toEqual({ minX: 1.25 * ts, maxX: 1.75 * ts, minY: 1.25 * ts, maxY: 1.75 * ts });
+    expect(footprintBox(fp, 1, 1, null, ts).minY).toBeCloseTo(1.375 * ts);
+  });
+
+  it('measures interaction reach from the edge of a box', () => {
+    const box = { minX: 0, minY: 0, maxX: 10, maxY: 10 };
+    expect(distanceToBox(box, 5, 5)).toBe(0);
+    expect(distanceToBox(box, 13, 14)).toBe(5);
   });
 });

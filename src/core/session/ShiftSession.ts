@@ -9,11 +9,12 @@ import { emptyContents, METAL_IDS } from '../content/metals';
 import { NPCS } from '../content/npcs';
 import { Emitter } from '../events/emitter';
 import { lightAt, roomAt } from '../level/asciiLevel';
-import { tileCenter, worldToTile } from '../level/grid';
+import { boxCenter, distanceToBox, tileBox, tileCenter, worldToTile } from '../level/grid';
 import type { LevelDef } from '../level/types';
 import type {
   AbilityDef,
   Bag,
+  Box,
   BagContents,
   CharacterDef,
   EffectiveStats,
@@ -23,7 +24,7 @@ import type {
 import { addToBag, bagFree, bagTotal, createBag, emptyBag } from '../systems/bag';
 import { saleValue } from '../systems/economy';
 import { bossSpeedMult, escalationLevel } from '../systems/escalation';
-import { moveWithCollision } from '../systems/movement';
+import { steerMove, type Detour } from '../systems/movement';
 import { rollRecharge, rollYield, scrapDuration } from '../systems/scrapping';
 import { deriveStats } from '../systems/stats';
 import { detectionRate, effectiveRange } from '../systems/detection';
@@ -75,7 +76,8 @@ export class ShiftSession {
   readonly fixtures: FixtureState[];
   readonly doors: DoorState[];
   readonly coworker: CoworkerState;
-  readonly vanPositions: Vec2[];
+  /** Hitbox of each van tile (interaction reach is measured from these). */
+  readonly vanBoxes: Box[];
 
   status: ShiftStatus = 'running';
   elapsed = 0;
@@ -84,6 +86,8 @@ export class ShiftSession {
   interaction: ActiveInteraction | null = null;
   /** Interact must be released between completed actions (prevents accidental chains). */
   private interactLatched = false;
+  /** In-progress sidestep around an object (see steerMove). */
+  private detour: Detour | null = null;
   private focus: InteractionTarget | null = null;
   private suspicion = { carrying: false, scrapping: false };
   private escalation = 0;
@@ -136,18 +140,34 @@ export class ShiftSession {
       const area = room?.rect ?? { col: s.col - 2, row: s.row - 2, w: 5, h: 5 };
       return createStudent(`student-${i}`, s, area, TILE_SIZE, this.rng);
     });
-    this.fixtures = this.level.fixtures.map((f) => ({
-      id: f.id,
-      def: FIXTURES.get(f.defId),
-      tile: f.tile,
-      pos: tileCenter(TILE_SIZE, f.tile.col, f.tile.row),
-      rechargeLeft: 0,
-      rechargeTotal: 0,
-    }));
+    this.fixtures = this.level.fixtures.map((f) => {
+      const box = this.grid.objectBoxes.get(f.id)!;
+      return {
+        id: f.id,
+        def: FIXTURES.get(f.defId),
+        tile: f.tile,
+        box,
+        pos: boxCenter(box),
+        rechargeLeft: 0,
+        rechargeTotal: 0,
+      };
+    });
     this.doors = this.level.doors.map((d) => ({ id: d.id, tile: d.tile, locked: d.locked }));
     const spot = this.rng.pick(this.level.coworkerSpots);
-    this.coworker = { tile: spot, pos: tileCenter(TILE_SIZE, spot.col, spot.row), found: false };
-    this.vanPositions = this.level.vanTiles.map((t) => tileCenter(TILE_SIZE, t.col, t.row));
+    const spotCenter = tileCenter(TILE_SIZE, spot.col, spot.row);
+    const half = TILE_SIZE * 0.4;
+    this.coworker = {
+      tile: spot,
+      pos: spotCenter,
+      box: {
+        minX: spotCenter.x - half,
+        maxX: spotCenter.x + half,
+        minY: spotCenter.y - half,
+        maxY: spotCenter.y + half,
+      },
+      found: false,
+    };
+    this.vanBoxes = this.level.vanTiles.map((t) => tileBox(TILE_SIZE, t.col, t.row));
   }
 
   get timeLeft() {
@@ -248,14 +268,30 @@ export class ShiftSession {
       p.stamina = Math.min(this.stats.staminaSeconds, p.stamina + P.staminaRegenPerSecond * dt);
     }
 
-    if (!p.moving) return;
-    p.facing = Math.atan2(my, mx);
+    if (!p.moving) {
+      this.detour = null;
+      return;
+    }
     const speed = p.crouching
       ? this.stats.walkSpeed * P.crouchSpeedMult
       : p.sprinting
         ? this.stats.sprintSpeed
         : this.stats.walkSpeed;
-    p.pos = moveWithCollision(this.grid, p.pos, P.radius, mx * speed * dt, my * speed * dt);
+    const before = p.pos;
+    const moved = steerMove(
+      this.grid,
+      p.pos,
+      P.radius,
+      mx * speed * dt,
+      my * speed * dt,
+      this.detour,
+    );
+    p.pos = moved.pos;
+    this.detour = moved.detour;
+    // Face where you actually went (sliding along a wall turns you to run along it).
+    const mdx = p.pos.x - before.x;
+    const mdy = p.pos.y - before.y;
+    p.facing = Math.hypot(mdx, mdy) > speed * dt * 0.2 ? Math.atan2(mdy, mdx) : Math.atan2(my, mx);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -265,10 +301,11 @@ export class ShiftSession {
   private findTarget(): InteractionTarget | null {
     const candidates: InteractionTarget[] = [];
     const pos = this.player.pos;
-    const near = (target: Vec2) => dist(pos, target) <= P.reach;
+    // Reach is measured from the object's edge, so big and small things feel the same.
+    const near = (box: Box) => distanceToBox(box, pos.x, pos.y) <= P.reach;
 
     for (const f of this.fixtures) {
-      if (!near(f.pos)) continue;
+      if (!near(f.box)) continue;
       const ready = f.rechargeLeft <= 0;
       const room = bagFree(this.bag) > 0;
       candidates.push({
@@ -288,8 +325,9 @@ export class ShiftSession {
     }
     for (const d of this.doors) {
       if (!d.locked) continue;
-      const doorPos = tileCenter(TILE_SIZE, d.tile.col, d.tile.row);
-      if (!near(doorPos)) continue;
+      const doorBox = tileBox(TILE_SIZE, d.tile.col, d.tile.row);
+      if (!near(doorBox)) continue;
+      const doorPos = boxCenter(doorBox);
       candidates.push({
         kind: 'door',
         id: d.id,
@@ -300,8 +338,8 @@ export class ShiftSession {
         pos: doorPos,
       });
     }
-    const vanPos = this.vanPositions.find(near);
-    if (vanPos) {
+    const vanBox = this.vanBoxes.find(near);
+    if (vanBox) {
       const hasScrap = bagTotal(this.bag) > 0;
       candidates.push({
         kind: 'van',
@@ -311,10 +349,10 @@ export class ShiftSession {
         duration: BALANCE.van.depositSeconds,
         enabled: hasScrap,
         reason: hasScrap ? undefined : 'Bag is empty',
-        pos: vanPos,
+        pos: boxCenter(vanBox),
       });
     }
-    if (!this.coworker.found && near(this.coworker.pos)) {
+    if (!this.coworker.found && near(this.coworker.box)) {
       const hurt = this.warnings > 0;
       candidates.push({
         kind: 'coworker',

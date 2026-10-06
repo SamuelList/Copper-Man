@@ -24,6 +24,7 @@ Project Copper is a 2.5D stealth RPG built with React 19, Three.js (fixed isomet
 - Balance numbers belong only in `core/content/balance.ts`.
 - New mechanics get unit tests in `core`. The pattern to copy is `ShiftSession.test.ts` driving a tiny ASCII map from `core/test/helpers.ts`.
 - Persisted save changes need a `SAVE_VERSION` bump plus a `migrateCareer` case.
-- Models are built procedurally in `game/render/models.ts`, keyed by content id, so placeholder art can be swapped for glTF later. Lit materials go through `MaterialKit` so they pick up room light and fog of war.
+- Models are built procedurally in `game/render/models.ts`, keyed by content id, so placeholder art can be swapped for glTF later. Build each one to its content `footprint`, which is also its hitbox. Lit materials go through `MaterialKit` so they pick up room light and fog of war.
+- Characters share one jointed rig (`buildCharacter` plus a `RigSpec` outfit). `game/render/gait.ts` animates it from measured ground speed; the gait math is pure and unit-tested.
 - Path aliases: `@core/*`, `@state/*`, `@game/*`, `@ui/*`.
 - `?debug` exposes `window.__copper.session` for e2e tests and manual tinkering.

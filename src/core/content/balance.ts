@@ -16,13 +16,20 @@ export const BALANCE = {
     max: 3,
   },
   player: {
-    radius: TILE_SIZE * 0.32,
+    /** Collision circle, sized to the worker model's shoulders. */
+    radius: TILE_SIZE * 0.22,
+    /**
+     * Pushing into a wall at less than this angle carries you along it at full speed (so a
+     * diagonal key runs you straight down a hallway).
+     */
+    slideAssistDegrees: 50,
     walkSpeed: stat({ 1: 100, 2: 122, 3: 145 }),
     sprintMult: 1.5,
     staminaSeconds: 2.5,
     staminaRegenPerSecond: 0.6,
     staminaRegenDelay: 0.75,
-    reach: TILE_SIZE * 1.15,
+    /** How close (from the edge of the object) you must be to interact with it. */
+    reach: TILE_SIZE * 0.85,
     caughtGraceSeconds: 3,
     /** Crouching halves speed (and disables sprint) but hides you behind low cover. */
     crouchSpeedMult: 0.5,

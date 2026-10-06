@@ -171,3 +171,77 @@ export class Sparks {
     this.points.geometry.attributes.position!.needsUpdate = true;
   }
 }
+
+/** Soft round sprite texture shared by dust puffs. */
+let puffTexture: THREE.CanvasTexture | null = null;
+function puff() {
+  if (puffTexture) return puffTexture;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, 'rgba(255,255,255,0.9)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  puffTexture = new THREE.CanvasTexture(c);
+  return puffTexture;
+}
+
+/** Little dust clouds kicked up by running feet. */
+export class DustPuffs {
+  readonly group = new THREE.Group();
+  private readonly sprites: THREE.Sprite[] = [];
+  private readonly life: number[] = [];
+  private readonly vel: THREE.Vector3[] = [];
+  private next = 0;
+
+  constructor(count = 36) {
+    for (let i = 0; i < count; i++) {
+      const s = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: puff(),
+          color: 0xd8cfc0,
+          transparent: true,
+          depthWrite: false,
+          opacity: 0,
+        }),
+      );
+      s.visible = false;
+      s.renderOrder = 4;
+      this.sprites.push(s);
+      this.life.push(0);
+      this.vel.push(new THREE.Vector3());
+      this.group.add(s);
+    }
+  }
+
+  emit(x: number, z: number, strength: number) {
+    const n = 2 + Math.round(strength * 2);
+    for (let k = 0; k < n; k++) {
+      const i = this.next;
+      this.next = (this.next + 1) % this.sprites.length;
+      const s = this.sprites[i]!;
+      s.position.set(x + (Math.random() - 0.5) * 0.12, 0.05, z + (Math.random() - 0.5) * 0.12);
+      s.scale.setScalar(0.12);
+      s.visible = true;
+      this.life[i] = 0.55;
+      const a = Math.random() * Math.PI * 2;
+      this.vel[i]!.set(Math.cos(a) * 0.35, 0.25 + Math.random() * 0.2, Math.sin(a) * 0.35);
+    }
+  }
+
+  update(dt: number) {
+    for (let i = 0; i < this.sprites.length; i++) {
+      if (this.life[i]! <= 0) continue;
+      const s = this.sprites[i]!;
+      this.life[i]! -= dt;
+      const t = Math.max(0, this.life[i]! / 0.55);
+      s.position.addScaledVector(this.vel[i]!, dt);
+      s.scale.setScalar(0.12 + (1 - t) * 0.32);
+      (s.material as THREE.SpriteMaterial).opacity = t * 0.45;
+      s.visible = t > 0;
+    }
+  }
+}

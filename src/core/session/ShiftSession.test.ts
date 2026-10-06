@@ -1,4 +1,4 @@
-import { TILE_SIZE } from '../content/balance';
+import { BALANCE, TILE_SIZE } from '../content/balance';
 import { SCHOOL_LEVEL } from '../level/levels/school';
 import { input, testLevel } from '../test/helpers';
 import { ShiftSession } from './ShiftSession';
@@ -43,13 +43,18 @@ const placePlayer = (s: ShiftSession, col: number, row: number) => {
   s.player.pos = { x: (col + 0.5) * TILE_SIZE, y: (row + 0.5) * TILE_SIZE };
 };
 
+/** Stand in front of the fountain at (3,1), inside its tile, as a player walking up would. */
+const standAtFountain = (s: ShiftSession) => {
+  s.player.pos = { x: 3.5 * TILE_SIZE, y: 1.8 * TILE_SIZE };
+};
+
 describe('ShiftSession', () => {
   it('runs a full scrap → sell loop', () => {
     const s = session();
     const collected = record(s, 'scrap:collected');
     const sold = record(s, 'scrap:sold');
 
-    placePlayer(s, 3, 2); // just below the fountain
+    standAtFountain(s);
     hold(s, 0.1, input());
     expect(s.currentTarget?.kind).toBe('fixture');
     hold(s, 6, input({ interact: true }));
@@ -74,7 +79,7 @@ describe('ShiftSession', () => {
 
   it('cancels scrapping when the player moves', () => {
     const s = session();
-    placePlayer(s, 3, 2);
+    standAtFountain(s);
     hold(s, 1, input({ interact: true }));
     expect(s.getSnapshot().prompt?.progress).toBeGreaterThan(0);
     s.tick(1 / 60, input({ interact: true, moveX: 1 }));
@@ -150,7 +155,7 @@ describe('ShiftSession', () => {
 
   it('lets Tomothy scrap without looking suspicious', () => {
     const s = session({ characterId: 'tomothy' });
-    placePlayer(s, 3, 2);
+    standAtFountain(s);
     hold(s, 0.5, input({ interact: true }));
     expect(s.interaction?.target.kind).toBe('fixture');
     expect(s.isSuspicious).toBe(false);
@@ -251,12 +256,60 @@ describe('ShiftSession stealth: crouching, cover, light, sight', () => {
     expect(dark.boss.detection).toBeLessThan(lit.boss.detection * 0.6);
   });
 
-  it('tall props block sight; low props are cover', () => {
+  it('tall props block sight with their real shape; low props are cover', () => {
     const s = stealthSession();
-    placePlayer(s, 2, 2);
-    expect(s.grid.isOpaque(4, 3)).toBe(true); // locker
+    // The locker at (4,3) backs onto the south wall and is half a tile deep.
+    expect(s.grid.isOpaque(4, 3)).toBe(false);
+    expect(s.grid.opaqueBoxesAt(4, 3)).toHaveLength(1);
     expect(s.grid.isLowCover(5, 1)).toBe(true); // desk
-    expect(s.isVisibleToPlayer({ x: 6.5 * TILE_SIZE, y: 3.5 * TILE_SIZE })).toBe(false);
-    expect(s.isVisibleToPlayer({ x: 6.5 * TILE_SIZE, y: 1.5 * TILE_SIZE })).toBe(true);
+    s.player.pos = { x: 2.5 * TILE_SIZE, y: 3.75 * TILE_SIZE };
+    expect(s.isVisibleToPlayer({ x: 6.5 * TILE_SIZE, y: 3.75 * TILE_SIZE })).toBe(false); // through it
+    s.player.pos = { x: 2.5 * TILE_SIZE, y: 3.25 * TILE_SIZE };
+    expect(s.isVisibleToPlayer({ x: 6.5 * TILE_SIZE, y: 3.25 * TILE_SIZE })).toBe(true); // in front
+  });
+
+  it('lets you walk into the free half of a furniture tile but not through the furniture', () => {
+    const s = stealthSession();
+    // Walk west along row 3 toward the locker at (4,3), hugging its open (north) half.
+    s.player.pos = { x: 6.5 * TILE_SIZE, y: 3.25 * TILE_SIZE };
+    hold(s, 1, input({ moveX: -1 }));
+    expect(s.player.pos.x).toBeLessThan(4 * TILE_SIZE); // passed in front of the locker
+    // Straight into the locker's body instead: stopped at its face.
+    s.player.pos = { x: 4.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
+    hold(s, 1, input({ moveY: 1 }));
+    const lockerTop = s.grid.opaqueBoxesAt(4, 3)[0]!.minY;
+    expect(s.player.pos.y).toBeLessThanOrEqual(lockerTop - BALANCE.player.radius + 0.5);
+  });
+});
+
+describe('ShiftSession movement feel', () => {
+  // A hallway lined with fixtures and lockers on the north wall.
+  const HALL = [
+    '##############',
+    '#1.F.O.H.R.O.#',
+    '#P..........Z#',
+    '#V...........#',
+    '#2############',
+  ];
+
+  it('runs the length of a cluttered hallway on a single diagonal key without getting stuck', () => {
+    const s = new ShiftSession({
+      level: testLevel(HALL),
+      characterId: 'dalton',
+      ownedUpgrades: [],
+      day: 1,
+      warnings: 0,
+      seed: 3,
+      durationSeconds: 60,
+    });
+    s.player.pos = { x: 1.5 * TILE_SIZE, y: 2.2 * TILE_SIZE };
+    // "W" on the isometric camera is north-east in map space: it pushes into the north wall.
+    const w = input({ moveX: Math.SQRT1_2, moveY: -Math.SQRT1_2 });
+    // Mid-run, sliding east under the lockers: facing follows where you actually go, not the key.
+    hold(s, 1.35, w);
+    expect(Math.abs(s.player.facing)).toBeLessThan(0.6);
+    // It sidesteps each wedged fixture (a short detour) and is past all five within 3.5s.
+    hold(s, 2.15, w);
+    expect(s.player.pos.x).toBeGreaterThan(11.5 * TILE_SIZE);
   });
 });

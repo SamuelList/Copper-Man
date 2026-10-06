@@ -1,24 +1,38 @@
 import type { Vec2 } from '@core/model/types';
 import * as THREE from 'three';
 import { headingToRotation, toWorld } from './coords';
+import { Gait } from './gait';
 import type { CharacterModel } from './models';
 import { textSprite } from './markers';
 
 export interface ActorPose {
   pos: Vec2;
   facing: number;
-  moving: boolean;
+  running?: boolean;
   crouching?: boolean;
-  sprinting?: boolean;
+  working?: boolean;
 }
 
-/** Smoothly animated character: position, turning, walk bob, crouch squash. */
+/** World-space point where a foot just landed. */
+export interface Footfall {
+  x: number;
+  z: number;
+  run: number;
+}
+
+/** Ignore position jumps bigger than this (teleports) when measuring speed. */
+const TELEPORT_TILES = 1.5;
+
+/**
+ * Animated character: follows the simulation position, turns smoothly, and drives the rig
+ * with the procedural gait (walk/run blend, crouch, work, leaning into turns).
+ */
 export class ActorView {
   readonly model: CharacterModel;
-  private walkPhase = 0;
-  private crouch = 0;
+  private readonly gait = new Gait();
   private yaw = 0;
-  private initialized = false;
+  private speed = 0;
+  private last: { x: number; z: number } | null = null;
 
   constructor(model: CharacterModel, scene: THREE.Scene) {
     this.model = model;
@@ -29,9 +43,21 @@ export class ActorView {
     return this.model.root;
   }
 
-  sync(pose: ActorPose, dt: number) {
-    const { root, body } = this.model;
-    root.position.set(toWorld(pose.pos.x), 0, toWorld(pose.pos.y));
+  /** Update from the simulation; returns any footfalls this frame (for dust puffs). */
+  sync(pose: ActorPose, dt: number): Footfall[] {
+    const { root, rig, thigh, shin, scale } = this.model;
+    const x = toWorld(pose.pos.x);
+    const z = toWorld(pose.pos.y);
+    root.position.set(x, 0, z);
+
+    // Measure real ground speed (tiles/s) so the legs match what the body actually does.
+    if (this.last && dt > 0) {
+      const moved = Math.hypot(x - this.last.x, z - this.last.z);
+      const instant = moved > TELEPORT_TILES ? 0 : moved / dt;
+      this.speed += (instant - this.speed) * (1 - Math.exp(-dt * 14));
+    }
+    this.last = { x, z };
+
     const targetYaw = headingToRotation(pose.facing);
     if (!this.initialized) {
       this.yaw = targetYaw;
@@ -39,16 +65,56 @@ export class ActorView {
     }
     let d = targetYaw - this.yaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    this.yaw += d * Math.min(1, dt * 14);
+    const turn = d * Math.min(1, dt * 14);
+    this.yaw += turn;
     root.rotation.y = this.yaw;
 
-    this.crouch += ((pose.crouching ? 1 : 0) - this.crouch) * Math.min(1, dt * 12);
-    if (pose.moving) this.walkPhase += dt * (pose.sprinting ? 16 : 11);
-    const bob = pose.moving ? Math.abs(Math.sin(this.walkPhase)) * 0.06 : 0;
-    body.position.y = bob * (1 - this.crouch * 0.5);
-    body.scale.set(1 + this.crouch * 0.08, 1 - this.crouch * 0.38, 1 + this.crouch * 0.08);
-    body.rotation.z = pose.sprinting ? -0.18 : -this.crouch * 0.12;
+    const {
+      pose: p,
+      strikes,
+      run,
+    } = this.gait.update({
+      speed: this.speed,
+      running: !!pose.running,
+      crouching: !!pose.crouching,
+      working: !!pose.working,
+      turnRate: dt > 0 ? turn / dt : 0,
+      dt,
+    });
+
+    rig.pelvis.position.y = (thigh + shin) * p.pelvis;
+    rig.pelvis.rotation.x = p.roll;
+    rig.torso.rotation.z = -p.lean;
+    rig.torso.rotation.y = p.twist;
+    rig.torso.scale.y = 1 + p.breathe;
+    rig.head.rotation.z = p.head;
+    rig.hipL.rotation.z = p.hipL;
+    rig.hipR.rotation.z = p.hipR;
+    rig.kneeL.rotation.z = p.kneeL;
+    rig.kneeR.rotation.z = p.kneeR;
+    rig.shoulderL.rotation.z = p.shoulderL;
+    rig.shoulderR.rotation.z = p.shoulderR;
+    rig.elbowL.rotation.z = p.elbowL;
+    rig.elbowR.rotation.z = p.elbowR;
+    // Arms hang slightly out from the body.
+    rig.shoulderL.rotation.x = 0.08;
+    rig.shoulderR.rotation.x = -0.08;
+
+    const footfalls: Footfall[] = [];
+    if (strikes.length) {
+      const c = Math.cos(this.yaw);
+      const sn = Math.sin(this.yaw);
+      for (const foot of strikes) {
+        // Local foot position (forward, side) rotated into the world.
+        const fx = 0.18 * scale;
+        const fz = (foot === 0 ? -0.085 : 0.085) * scale;
+        footfalls.push({ x: x + fx * c + fz * sn, z: z - fx * sn + fz * c, run });
+      }
+    }
+    return footfalls;
   }
+
+  private initialized = false;
 }
 
 /** "!" / "?" above an NPC's head. */

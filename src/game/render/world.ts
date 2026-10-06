@@ -1,7 +1,10 @@
 import { tileAt } from '@core/level/asciiLevel';
 import type { ShiftSession } from '@core/session/ShiftSession';
 import * as THREE from 'three';
-import { mountRotation, toWorld, wallSide } from './coords';
+import { PROPS } from '@core/content/props';
+import { mountSide } from '@core/level/footprint';
+import type { Footprint } from '@core/model/types';
+import { mountRotation, toWorld } from './coords';
 import { createFloorTexture, createLightMap } from './floorTexture';
 import { shadeWithWorld, type MaterialKit } from './materials';
 import {
@@ -16,19 +19,6 @@ import { PALETTE } from './palette';
 
 export const WALL_HEIGHT = 1.6;
 const WALL_CUT_HEIGHT = 0.22;
-
-/** Fixtures/props that sit against a wall rather than in the middle of their tile. */
-const WALL_MOUNTED = new Set([
-  'drinking-fountain',
-  'wall-heater',
-  'air-line',
-  'radiator',
-  'toilet',
-  'mop-sink',
-  'lockers',
-  'shelf',
-  'bench',
-]);
 
 /**
  * Instanced walls that duck down when they'd hide the player (classic iso "cutaway"), so the
@@ -171,9 +161,10 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
   scene.add(baseboards);
 
   // Fixtures and props.
-  const place = (obj: THREE.Object3D, defId: string, col: number, row: number) => {
+  // Orientation comes from the same core rule that places the hitbox, so they always match.
+  const place = (obj: THREE.Object3D, fp: Footprint, col: number, row: number) => {
     obj.position.set(col + 0.5, 0, row + 0.5);
-    if (WALL_MOUNTED.has(defId)) obj.rotation.y = mountRotation(wallSide(level, col, row));
+    if (fp.anchor === 'wall') obj.rotation.y = mountRotation(mountSide(level, col, row));
     scene.add(obj);
   };
   const fixtures = new Map<string, THREE.Object3D>();
@@ -181,12 +172,12 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
     const build = FIXTURE_MODELS[f.def.id];
     if (!build) continue;
     const obj = build(kit);
-    place(obj, f.def.id, f.tile.col, f.tile.row);
+    place(obj, f.def.footprint, f.tile.col, f.tile.row);
     fixtures.set(f.id, obj);
   }
   for (const p of level.props) {
     const build = PROP_MODELS[p.defId];
-    if (build) place(build(kit), p.defId, p.tile.col, p.tile.row);
+    if (build) place(build(kit), PROPS.get(p.defId).footprint, p.tile.col, p.tile.row);
   }
 
   // Van across its tiles, facing the school.

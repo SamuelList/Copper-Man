@@ -1,6 +1,6 @@
 import type { BossMode } from '../ai/bossBrain';
 import type { LevelDef } from '../level/types';
-import type { Bag, BagContents, FixtureDef, MetalId, TilePos, Vec2 } from '../model/types';
+import type { Bag, BagContents, Box, FixtureDef, MetalId, TilePos, Vec2 } from '../model/types';
 
 export interface ShiftConfig {
   level: LevelDef;
@@ -44,6 +44,9 @@ export interface FixtureState {
   id: string;
   def: FixtureDef;
   tile: TilePos;
+  /** Hitbox (pixels): what you bump into and reach for. */
+  box: Box;
+  /** Centre of the hitbox. */
   pos: Vec2;
   rechargeLeft: number;
   rechargeTotal: number;
@@ -58,6 +61,7 @@ export interface DoorState {
 export interface CoworkerState {
   tile: TilePos;
   pos: Vec2;
+  box: Box;
   found: boolean;
 }
 

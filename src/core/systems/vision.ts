@@ -1,6 +1,6 @@
 import { BALANCE } from '../content/balance';
 import type { Grid } from '../level/grid';
-import type { Vec2 } from '../model/types';
+import type { Box, Vec2 } from '../model/types';
 import { angleDiff, angleTo, dist } from '../util/math';
 
 /**
@@ -54,15 +54,48 @@ export function traverseRay(
   }
 }
 
-/** Distance along a ray until it enters an opaque tile, capped at `maxDist`. */
+/** Distance along a ray to where it enters a box (slab test), or Infinity if it misses. */
+function rayBoxDistance(ox: number, oy: number, dx: number, dy: number, b: Box): number {
+  let tMin = -Infinity;
+  let tMax = Infinity;
+  if (Math.abs(dx) < 1e-12) {
+    if (ox < b.minX || ox > b.maxX) return Infinity;
+  } else {
+    const t1 = (b.minX - ox) / dx;
+    const t2 = (b.maxX - ox) / dx;
+    tMin = Math.max(tMin, Math.min(t1, t2));
+    tMax = Math.min(tMax, Math.max(t1, t2));
+  }
+  if (Math.abs(dy) < 1e-12) {
+    if (oy < b.minY || oy > b.maxY) return Infinity;
+  } else {
+    const t1 = (b.minY - oy) / dy;
+    const t2 = (b.maxY - oy) / dy;
+    tMin = Math.max(tMin, Math.min(t1, t2));
+    tMax = Math.min(tMax, Math.max(t1, t2));
+  }
+  if (tMax < Math.max(tMin, 0)) return Infinity;
+  return Math.max(tMin, 0);
+}
+
+/**
+ * Distance along a ray until it hits something that blocks sight — an opaque tile, or the
+ * actual shape of tall furniture inside a tile — capped at `maxDist`.
+ */
 export function castRay(grid: Grid, origin: Vec2, angle: number, maxDist: number): number {
   let hit = maxDist;
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
   traverseRay(grid, origin, angle, maxDist, (col, row, t) => {
     if (t > 0 && grid.isOpaque(col, row)) {
-      hit = t;
+      hit = Math.min(hit, t);
       return true;
     }
-    return false;
+    for (const b of grid.opaqueBoxesAt(col, row)) {
+      const tb = rayBoxDistance(origin.x, origin.y, dx, dy, b);
+      if (tb < hit) hit = tb;
+    }
+    return hit < maxDist;
   });
   return hit;
 }

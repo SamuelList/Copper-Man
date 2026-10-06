@@ -19,6 +19,25 @@ export interface TilePos {
   row: number;
 }
 
+/** Axis-aligned box in simulation pixels. */
+export interface Box {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/**
+ * How much floor an object really covers, in tiles. Wall-anchored objects sit with their back
+ * against the neighbouring wall: `w` runs along the wall, `d` is how far they stick out.
+ * Centre-anchored objects are `w` (map x) by `d` (map y) around the tile centre.
+ */
+export interface Footprint {
+  w: number;
+  d: number;
+  anchor: 'wall' | 'center';
+}
+
 export interface NumRange {
   min: number;
   max: number;
@@ -67,6 +86,7 @@ export interface FixtureDef {
   risk: RiskLevel;
   /** Waist-high fixtures hide a crouching worker. */
   cover: 'low' | 'none';
+  footprint: Footprint;
   color: number;
 }
 
@@ -76,6 +96,7 @@ export interface PropDef {
   name: string;
   glyph: string;
   height: 'tall' | 'low';
+  footprint: Footprint;
   color: number;
 }
 
