@@ -103,6 +103,25 @@ export const BALANCE = {
     alarmSeconds: 2,
     alertCooldownSeconds: 8,
   },
+  /** Experience: what earns it and how much each level costs. */
+  xp: {
+    perScrap: 8,
+    /** Per dollar of scrap sold. */
+    perDollar: 0.4,
+    perDoor: 6,
+    coworker: 15,
+    shiftComplete: 25,
+    /** Bonus for a whole shift without getting caught. */
+    cleanShift: 40,
+    firstLevel: 100,
+    perLevelIncrease: 50,
+  },
+  gadgets: {
+    /** Seconds of free sprinting after an energy drink. */
+    energyDrinkSeconds: 6,
+    /** How far a whoopee cushion flies, pixels. */
+    throwRange: TILE_SIZE * 5,
+  },
   /** Room light levels, 0 (pitch dark) to 1 (fully lit). Rooms can override with `light`. */
   light: {
     byRoomKind: {

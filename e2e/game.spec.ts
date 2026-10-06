@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-/** Minimal view of the debug hook exposed with `?debug` (see ShiftScene). */
+/** Minimal view of the debug hook exposed with `?debug` (see GameEngine). */
 interface DebugWindow {
   __copper?: {
     session: {
@@ -88,15 +88,17 @@ test('a full day: hire, sneak, crouch, sell, clock out, shop, next day', async (
   await testInfo.attach('shift', { body: await page.screenshot(), contentType: 'image/png' });
 
   // Clock out early → banner → summary.
+  // The banner only shows for a moment, so start watching for it before clicking.
   await page.keyboard.press('Escape');
+  const banner = page.waitForSelector('[data-testid="end-banner"]:has-text("CLOCKED OUT")');
   await page.getByRole('button', { name: 'Clock out early' }).click();
-  await expect(page.getByTestId('end-banner')).toContainText('CLOCKED OUT');
+  await banner;
   await expect(page.getByRole('heading', { name: 'Day 1 complete' })).toBeVisible({
     timeout: 10_000,
   });
 
   // Shop: spend the $60.
-  await page.getByRole('button', { name: /hardware store/i }).click();
+  await page.getByRole('button', { name: /hardware store|shop/i }).click();
   await expect(page.getByTestId('cash')).toHaveText('$60');
   await page.getByRole('button', { name: 'Buy Cowboy Boots' }).click();
   await expect(page.getByTestId('cash')).toHaveText('$0');

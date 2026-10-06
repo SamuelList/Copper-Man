@@ -1,4 +1,6 @@
+import { CONSUMABLES } from '@core/content/consumables';
 import type { PlayerInput } from '@core/session/types';
+import { virtualInput } from '@state/virtualInput';
 
 /** Ground-plane basis of the screen, so "W" walks toward the top of the screen. */
 export interface ScreenBasis {
@@ -21,18 +23,30 @@ const GAME_KEYS = new Set([
   'KeyC',
   'ShiftLeft',
   'ShiftRight',
+  'Digit1',
+  'Digit2',
+  'Digit3',
 ]);
 
+/** Gadget hotkeys: Digit1 → the consumable whose hotkey is '1', and so on. */
+const GADGET_KEYS = new Map(CONSUMABLES.all.map((c) => [`Digit${c.hotkey}`, c.id]));
+
+/** Joystick dead zone, the deflection that reaches full walking speed, and the sprint rim. */
+const STICK_DEAD = 0.12;
+const STICK_FULL = 0.55;
+const STICK_SPRINT = 0.92;
+
 /**
- * Turns the keyboard into world-space `PlayerInput`. Movement is screen-relative (rotated into
- * the fixed camera's frame). Held actions are polled; one-shot actions (ability, crouch toggle,
- * pause) are captured on keydown so a quick tap is never lost between frames. Gamepad/touch can
- * be merged in here without the simulation knowing.
+ * Turns the keyboard and the on-screen touch controls into world-space `PlayerInput`. Movement is
+ * screen-relative (rotated into the fixed camera's frame). Held actions are polled; one-shot
+ * actions (ability, crouch toggle, gadgets, pause) are queued on keydown or tap so a quick press
+ * is never lost between frames.
  */
 export class InputController {
   private readonly held = new Set<string>();
   private abilityQueued = false;
   private pauseQueued = false;
+  private useQueued: string | null = null;
   private crouching = false;
 
   constructor(private readonly target: Window = window) {
@@ -55,6 +69,8 @@ export class InputController {
     this.held.add(e.code);
     if (e.code === 'KeyQ') this.abilityQueued = true;
     if (e.code === 'KeyC') this.crouching = !this.crouching;
+    const gadget = GADGET_KEYS.get(e.code);
+    if (gadget) this.useQueued = gadget;
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
@@ -63,6 +79,7 @@ export class InputController {
 
   private onBlur = () => {
     this.held.clear();
+    virtualInput.reset();
   };
 
   private down(...codes: string[]) {
@@ -70,19 +87,38 @@ export class InputController {
   }
 
   read(basis: ScreenBasis): PlayerInput {
-    const sx = Number(this.down('KeyD', 'ArrowRight')) - Number(this.down('KeyA', 'ArrowLeft'));
-    const sy = Number(this.down('KeyW', 'ArrowUp')) - Number(this.down('KeyS', 'ArrowDown'));
+    for (const action of virtualInput.drain()) {
+      if (action.type === 'ability') this.abilityQueued = true;
+      else if (action.type === 'crouch') this.crouching = !this.crouching;
+      else this.useQueued = action.id;
+    }
+    let sx = Number(this.down('KeyD', 'ArrowRight')) - Number(this.down('KeyA', 'ArrowLeft'));
+    let sy = Number(this.down('KeyW', 'ArrowUp')) - Number(this.down('KeyS', 'ArrowDown'));
+    let stickSprint = false;
+    if (sx === 0 && sy === 0) {
+      // Analog stick: creep at a light touch, full walk from about half way, sprint at the rim.
+      const mag = Math.hypot(virtualInput.stickX, virtualInput.stickY);
+      if (mag > STICK_DEAD) {
+        const speed = Math.min(1, (mag - STICK_DEAD) / (STICK_FULL - STICK_DEAD));
+        sx = (virtualInput.stickX / mag) * speed;
+        sy = (virtualInput.stickY / mag) * speed;
+        stickSprint = mag >= STICK_SPRINT;
+      }
+    }
     const moveX = sx * basis.screenRight.x + sy * basis.screenUp.x;
     const moveY = sx * basis.screenRight.y + sy * basis.screenUp.y;
     const ability = this.abilityQueued;
+    const use = this.useQueued;
     this.abilityQueued = false;
+    this.useQueued = null;
     return {
       moveX,
       moveY,
-      sprint: this.down('ShiftLeft', 'ShiftRight'),
-      interact: this.down('KeyE', 'Space'),
+      sprint: this.down('ShiftLeft', 'ShiftRight') || stickSprint || virtualInput.sprint,
+      interact: this.down('KeyE', 'Space') || virtualInput.interact,
       ability,
       crouch: this.crouching,
+      use,
     };
   }
 
@@ -94,6 +130,7 @@ export class InputController {
   }
 
   dispose() {
+    virtualInput.reset();
     this.target.removeEventListener('keydown', this.onKeyDown);
     this.target.removeEventListener('keyup', this.onKeyUp);
     this.target.removeEventListener('blur', this.onBlur);

@@ -35,13 +35,24 @@ npm run dev        # http://localhost:5173
 | C             | Crouch / stand (half speed, hides you behind cover) |
 | E / Space     | **Hold** to scrap, unlock, sell, wake               |
 | Q             | Character ability                                   |
-| Mouse wheel   | Zoom                                                |
+| 1 / 2 / 3     | Use a gadget                                        |
 | Esc           | Pause / clock out early                             |
+
+**On a phone or tablet** the HUD switches to thumb controls as soon as you touch the screen:
+
+- Drag anywhere on the left half to walk. A light push creeps; push to the rim to sprint.
+- Hold the big hand button to scrap, unlock, sell or wake. It shows the action and fills as you work.
+- Crouch, ability and gadget buttons sit next to it. The pause button is top right.
+
+Landscape is roomiest, but portrait works too. `?touch` forces touch controls on a desktop.
 
 ## How it plays
 
 - **Shifts.** Each day is a 5-minute shift. Sell scrap at the van; anything still in your bag when the whistle blows is lost.
-- **Between shifts.** Spend your cash at the hardware store on boots, tools, bags, and keys.
+- **Between shifts.** The hardware store has three tabs:
+  - **Gear:** eight categories of tiered upgrades: boots, tools, bags, keys, gloves (scrap quietly), disguises (carry without looking guilty), radios (hear the boss from further away), and scrapyard deals (sell for more).
+  - **Gadgets:** one-use items that carry over until used. Energy drinks give free sprinting. Whoopee cushions are thrown ahead and lure Mr. Gravy to the noise. Bolt cutters open a locked door instantly.
+  - **Skills:** everything you do earns XP (scrapping, selling, doors, waking your coworker, finishing a shift, never getting caught). Each level is a skill point for three trees: **Shadow** (stealth), **Hustle** (speed and capacity), and **Wheeler-Dealer** (money, an extra heart, and talking your way out of one catch per shift).
 - **Stealth.** Mr. Gravy patrols the hallways with a vision cone that walls block.
   - He only cares if you're **carrying scrap** or **scrapping**. While he sees that, a detection meter fills; when it's full, he chases you.
   - If he catches you: you get a warning, your bag is confiscated, and you're escorted back to the van.
@@ -77,20 +88,20 @@ Dependencies only point right, and ESLint enforces it (`no-restricted-imports` i
 | Layer           | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`src/core`**  | Game rules and content, with no Three.js, React, or DOM. `ShiftSession` is the authoritative simulation: it takes `tick(dt, input)`, exposes state to draw, and emits typed events. AI, vision (exact visibility outlines, cover, light), pathfinding, and collision are plain functions, so they're unit-tested headless. Furniture and fixtures collide and block sight with their real `footprint`, not their whole tile; the player is a circle that slides along walls and sidesteps objects wedged against them. |
-| **`src/state`** | Zustand stores. `careerStore` is persisted to localStorage with a versioned schema and `migrate`. `shiftStore` is the HUD mirror. `appStore` is the screen state machine.                                                                                                                                                                                                                                                                                                                                              |
+| **`src/state`** | Zustand stores. `careerStore` is persisted to localStorage with a versioned schema and `migrate`. `shiftStore` is the HUD mirror. `appStore` is the screen state machine. `virtualInput` carries the on-screen touch controls to the game's input controller.                                                                                                                                                                                                                                                          |
 | **`src/game`**  | Three.js renderer and input. `GameEngine` steps the session on a fixed 60 Hz timestep and draws it with a fixed isometric `IsoCamera`. Room light and fog of war are map-space textures applied to every material by one shader patch (`render/materials.ts`). `bridge.ts` pushes session events and throttled snapshots into `shiftStore`.                                                                                                                                                                            |
 | **`src/ui`**    | React screens and HUD. It mounts `<GameView />` and never imports Three.js directly. HUD widgets subscribe to narrow slices of the store with `useShallow`.                                                                                                                                                                                                                                                                                                                                                            |
 
 ```
 src/
   core/
-    content/   characters, fixtures, props, metals, upgrades, abilities, npcs, balance (all tunables)
+    content/   characters, fixtures, props, metals, upgrades, consumables, skills, abilities, npcs, balance
     model/     shared types
-    systems/   stats, scrapping, bag, economy, warnings, escalation, shop, vision, detection, pathfinding, movement
+    systems/   stats, progression, scrapping, bag, economy, warnings, escalation, shop, vision, detection, pathfinding, movement
     ai/        bossBrain, studentBrain, navigation
     level/     ASCII level format + validator, levels/ (school map)
     session/   ShiftSession + types
-  state/       careerStore, shiftStore, appStore, messages (event → toast copy)
+  state/       careerStore, shiftStore, appStore, inputMode, virtualInput (touch → game), messages
   game/        GameView.tsx, GameEngine, render/ (camera, world, rigged models, gait, materials, fog, cones, markers), input/, bridge
   ui/          App, screens/, hud/, components/
 e2e/           Playwright tests
@@ -103,10 +114,12 @@ e2e/           Playwright tests
 | A fixture       | Add an entry to `core/content/fixtures.ts` with a unique `glyph`, its `cover`, and its `footprint` (its real size on the floor, which is also its hitbox). Place that glyph in a map, and add a model builder of the same size to `FIXTURE_MODELS` in `game/render/models.ts`. |
 | Furniture       | Add to `core/content/props.ts` (`height: 'tall'` blocks sight, `'low'` is cover; `footprint` is the hitbox) and a builder to `PROP_MODELS`.                                                                                                                                    |
 | A worker        | Add to `core/content/characters.ts`. For a new ability, add a strategy object to `core/content/abilities.ts`. `conceals(signal, active)` decides what NPCs can't notice.                                                                                                       |
-| An upgrade      | Add a tier to `core/content/upgrades.ts`. The shop UI picks it up automatically.                                                                                                                                                                                               |
+| An upgrade      | Add a tier to `core/content/upgrades.ts` with an `effect` (any `Modifiers` field). The shop UI picks it up automatically.                                                                                                                                                      |
+| A gadget        | Add to `core/content/consumables.ts` and handle its id in `ShiftSession.useGadget`.                                                                                                                                                                                            |
+| A skill         | Add to `core/content/skills.ts` with a `tree`, `tier`, `requires` (any one unlocks it) and an `effect`.                                                                                                                                                                        |
 | A level         | Write a map in `core/level/levels/` (legend in `asciiLevel.ts`) and register it in `levels/index.ts`. `validateLevel` runs in tests and catches unreachable fixtures or broken patrols. A Tiled loader can return the same `LevelDef`.                                         |
 | Real art        | Swap a builder in `game/render/models.ts` for one that clones a loaded glTF scene. Every model is looked up by content id.                                                                                                                                                     |
-| A save field    | Add it to `CareerData`, bump `SAVE_VERSION`, and add a `case` to `migrateCareer`.                                                                                                                                                                                              |
+| A save field    | Add it to `CareerData`, bump `SAVE_VERSION`, and add a step to `migrateCareer`.                                                                                                                                                                                                |
 | Balance changes | Everything numeric lives in `core/content/balance.ts`.                                                                                                                                                                                                                         |
 
 ### Debugging

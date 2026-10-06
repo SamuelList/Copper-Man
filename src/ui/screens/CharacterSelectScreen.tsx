@@ -21,7 +21,7 @@ export function CharacterSelectScreen() {
   };
 
   return (
-    <main className={styles.screen}>
+    <main className={[styles.screen, styles.hub].join(' ')}>
       <h1 className={styles.heading}>Pick your worker</h1>
       <p className={styles.subtitle} style={{ margin: '0.25rem auto 0' }}>
         Stats are Speed, Repair and Carry. Matching your trade to a fixture speeds up scrapping.
@@ -60,7 +60,7 @@ export function CharacterSelectScreen() {
                 {ability ? (
                   <>
                     <strong>
-                      {ability.name} {ability.kind === 'active' ? '(Q)' : '(passive)'}
+                      {ability.name} {ability.kind === 'active' ? '(active)' : '(passive)'}
                     </strong>
                     {ability.description}
                   </>
@@ -75,11 +75,11 @@ export function CharacterSelectScreen() {
           );
         })}
       </div>
-      <div className={styles.actions}>
+      <div className={styles.stickyActions}>
         <Button variant="ghost" onClick={() => go('title')}>
           Back
         </Button>
-        <Button variant="primary" onClick={hire}>
+        <Button variant="primary" onClick={hire} className={styles.clockIn}>
           Hire {chosen.name} &amp; clock in
         </Button>
       </div>

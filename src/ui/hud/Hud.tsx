@@ -1,12 +1,16 @@
 import { METAL_IDS, METALS } from '@core/content/metals';
 import { NPCS } from '@core/content/npcs';
 import { bagFree, bagTotal } from '@core/systems/bag';
+import { useInputMode } from '@state/inputMode';
 import { useShiftStore, type Toast } from '@state/shiftStore';
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Kbd } from '../components';
 import { clock, css, money, units } from '../format';
 import styles from './hud.module.css';
+import { GadgetTray, TouchControls } from './TouchControls';
+
+const useTouch = () => useInputMode((s) => s.mode === 'touch');
 
 const LOW_TIME = 30;
 
@@ -36,6 +40,28 @@ function TimerCard() {
   );
 }
 
+/** XP earned this shift; pops briefly whenever it goes up. */
+function XpCounter() {
+  const xp = useShiftStore((s) => s.snapshot?.xp ?? 0);
+  const last = useRef(xp);
+  const [pop, setPop] = useState(0);
+  useEffect(() => {
+    if (xp > last.current) {
+      const gained = xp - last.current;
+      setPop(gained);
+      const t = setTimeout(() => setPop(0), 900);
+      last.current = xp;
+      return () => clearTimeout(t);
+    }
+    last.current = xp;
+  }, [xp]);
+  return (
+    <div className={styles.xp} data-testid="shift-xp">
+      {pop > 0 && <span className={styles.xpPop}>+{pop}</span>}★ {xp} XP
+    </div>
+  );
+}
+
 function StatusCard() {
   const { earned, warnings, max } = useShiftStore(
     useShallow((s) => ({
@@ -45,7 +71,7 @@ function StatusCard() {
     })),
   );
   return (
-    <div className={styles.card} style={{ textAlign: 'right' }}>
+    <div className={[styles.card, styles.status].join(' ')}>
       <div className={styles.label}>Sold this shift</div>
       <div className={styles.cash} data-testid="shift-earned">
         {money(earned)}
@@ -57,7 +83,24 @@ function StatusCard() {
           </span>
         ))}
       </div>
+      <XpCounter />
     </div>
+  );
+}
+
+function PauseButton() {
+  const setPaused = useShiftStore((s) => s.setPaused);
+  const running = useShiftStore((s) => s.snapshot?.status === 'running');
+  return (
+    <button
+      type="button"
+      className={styles.pause}
+      onClick={() => setPaused(true)}
+      disabled={!running}
+      aria-label="Pause"
+    >
+      ❚❚
+    </button>
   );
 }
 
@@ -220,6 +263,7 @@ function DetectionCard() {
 }
 
 function PromptCard() {
+  const touch = useTouch();
   const prompt = useShiftStore(
     useShallow((s) => {
       const p = s.snapshot?.prompt;
@@ -231,7 +275,15 @@ function PromptCard() {
     <div className={[styles.card, styles.prompt].join(' ')} data-testid="interact-prompt">
       {prompt.enabled ? (
         <span>
-          Hold <Kbd>E</Kbd> {prompt.verb} — {prompt.label}
+          {touch ? (
+            <>
+              {prompt.verb} — {prompt.label}
+            </>
+          ) : (
+            <>
+              Hold <Kbd>E</Kbd> {prompt.verb} — {prompt.label}
+            </>
+          )}
         </span>
       ) : (
         <span className={styles.promptDisabled}>
@@ -275,6 +327,7 @@ function Toasts() {
 
 /** How visible you are: the light where you stand, and whether you're crouched. */
 function VisibilityCard() {
+  const touch = useTouch();
   const { light, crouching } = useShiftStore(
     useShallow((s) => ({
       light: Math.round((s.snapshot?.light ?? 1) * 20) / 20,
@@ -290,7 +343,13 @@ function VisibilityCard() {
         <strong>{label}</strong> <span className={styles.label}>{hint}</span>
         <br />
         <span className={styles.label}>
-          {crouching ? 'Crouching · hidden behind low cover' : 'Standing'} · <Kbd>C</Kbd>
+          {crouching ? 'Crouching · hidden behind low cover' : 'Standing'}
+          {!touch && (
+            <>
+              {' '}
+              · <Kbd>C</Kbd>
+            </>
+          )}
         </span>
       </span>
     </div>
@@ -313,7 +372,9 @@ function Controls() {
         <Kbd>Q</Kbd> ability
       </span>
       <span>
-        <Kbd>Wheel</Kbd> zoom
+        <Kbd>1</Kbd>
+        <Kbd>2</Kbd>
+        <Kbd>3</Kbd> gadgets
       </span>
       <span>
         <Kbd>Esc</Kbd> pause
@@ -351,29 +412,42 @@ function EndBanner() {
 
 /** HUD overlay. Each card subscribes to just the slice it renders to keep re-renders cheap. */
 export function Hud() {
+  const touch = useTouch();
   return (
-    <div className={styles.hud} data-testid="hud">
+    <div className={styles.hud} data-testid="hud" data-touch={touch}>
       <div className={styles.topLeft}>
         <TimerCard />
+        {touch && <BagCard />}
+        {touch && <VisibilityCard />}
       </div>
       <div className={styles.topCenter}>
         <DetectionCard />
       </div>
       <div className={styles.topRight}>
-        <StatusCard />
+        <div className={styles.row} style={{ alignItems: 'flex-start' }}>
+          <StatusCard />
+          <PauseButton />
+        </div>
       </div>
       <Toasts />
-      <div className={styles.bottomLeft}>
-        <BagCard />
-        <Controls />
-      </div>
+      {!touch && (
+        <div className={styles.bottomLeft}>
+          <BagCard />
+          <Controls />
+        </div>
+      )}
       <div className={styles.bottomCenter}>
         <PromptCard />
       </div>
-      <div className={styles.bottomRight}>
-        <VisibilityCard />
-        <AbilityCard />
-      </div>
+      {touch ? (
+        <TouchControls />
+      ) : (
+        <div className={styles.bottomRight}>
+          <GadgetTray showKeys />
+          <VisibilityCard />
+          <AbilityCard />
+        </div>
+      )}
       <EndBanner />
     </div>
   );

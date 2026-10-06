@@ -38,10 +38,12 @@ export interface BossContext {
   /** Detection meter gain per second while `sees` (zone + light adjusted; see systems/detection). */
   rate: number;
   playerPos: Vec2;
-  /** A student shouted this frame. */
+  /** Something to check out this frame: a student shouting, or a noise. */
   alert: Vec2 | null;
   speedMult: number;
   tuning: BossTuning;
+  /** Detection meter drain per second while the player is out of view (default: balance). */
+  decay?: number;
 }
 
 export interface BossResult {
@@ -109,7 +111,13 @@ export function updateBoss(boss: BossState, ctx: BossContext): BossResult {
   const turn = NPC.turnRate;
   let caught = false;
 
-  boss.detection = updateDetection(boss.detection, ctx.sees, ctx.rate, NPC.vision.decayRate, dt);
+  boss.detection = updateDetection(
+    boss.detection,
+    ctx.sees,
+    ctx.rate,
+    ctx.decay ?? NPC.vision.decayRate,
+    dt,
+  );
   if (ctx.sees) boss.lastKnown = { ...ctx.playerPos };
 
   switch (boss.mode) {
@@ -165,6 +173,12 @@ export function updateBoss(boss: BossState, ctx: BossContext): BossResult {
         enter(boss, 'suspicious');
         break;
       }
+      if (ctx.alert) {
+        // Something new to check out: head there instead.
+        boss.lastKnown = { ...ctx.alert };
+        boss.path = [];
+        boss.pathIndex = 0;
+      }
       const target = boss.lastKnown;
       if (!target) {
         enter(boss, 'return');
@@ -187,6 +201,11 @@ export function updateBoss(boss: BossState, ctx: BossContext): BossResult {
     case 'search': {
       if (ctx.sees) {
         enter(boss, 'suspicious');
+        break;
+      }
+      if (ctx.alert) {
+        boss.lastKnown = { ...ctx.alert };
+        enter(boss, 'investigate');
         break;
       }
       boss.facing += turn * 0.35 * dt;

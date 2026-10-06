@@ -2,8 +2,9 @@ import * as THREE from 'three';
 
 /**
  * Fixed axonometric camera: true isometric angles (45° around, ~35.26° down), looking north-east
- * from the south-west. Orthographic, so there's no perspective distortion; it only follows and
- * zooms.
+ * from the south-west. Orthographic, so there's no perspective distortion. It only follows the
+ * player; the framing is fixed and close, sized from the screen's shorter side so phones and
+ * monitors see about the same amount of the school.
  */
 export class IsoCamera {
   readonly camera: THREE.OrthographicCamera;
@@ -13,31 +14,28 @@ export class IsoCamera {
   /** Ground-plane direction pointing from the scene toward the camera. */
   readonly toCamera = new THREE.Vector2(-Math.SQRT1_2, Math.SQRT1_2);
 
-  /** World units visible vertically at zoom 1. */
-  private readonly viewHeight = 15;
   private readonly offset = new THREE.Vector3(-1, 1, 1).normalize().multiplyScalar(60);
   private readonly target = new THREE.Vector3();
   private aspect = 16 / 9;
-  private zoomLevel = 1;
 
   constructor() {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   }
 
+  /** World units across the screen's shorter side, from its size in CSS pixels. */
+  static shortSideUnits(shortSidePx: number) {
+    return THREE.MathUtils.clamp(shortSidePx / 64, 8.5, 11);
+  }
+
   resize(width: number, height: number) {
     this.aspect = width / Math.max(1, height);
-    // Keep the view comfortable on very wide or tall screens.
-    const h = this.viewHeight * (this.aspect < 1 ? 1.35 : 1);
+    const short = IsoCamera.shortSideUnits(Math.min(width, height));
+    // Landscape: `short` units tall. Portrait: `short` units wide (and taller to match).
+    const h = this.aspect >= 1 ? short : short / this.aspect;
     this.camera.top = h / 2;
     this.camera.bottom = -h / 2;
     this.camera.left = (-h * this.aspect) / 2;
     this.camera.right = (h * this.aspect) / 2;
-    this.camera.updateProjectionMatrix();
-  }
-
-  zoomBy(steps: number) {
-    this.zoomLevel = THREE.MathUtils.clamp(this.zoomLevel * Math.pow(1.12, steps), 0.6, 1.8);
-    this.camera.zoom = this.zoomLevel;
     this.camera.updateProjectionMatrix();
   }
 

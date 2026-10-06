@@ -16,6 +16,12 @@ const BOSS_MODE_MESSAGES: Partial<Record<BossMode, Message>> = {
   investigate: { text: `${boss} is coming to check something out…`, tone: 'warn' },
 };
 
+const GADGET_MESSAGES: Record<string, Message> = {
+  'energy-drink': { text: 'Glug glug — free sprinting for a few seconds!', tone: 'good' },
+  'whoopee-cushion': { text: `PFFFT! ${boss} wants to know who did that…`, tone: 'info' },
+  'bolt-cutters': { text: 'Snip! Lock cut.', tone: 'good' },
+};
+
 /** Player-facing copy for simulation events. Returns null for events that shouldn't toast. */
 export function describeEvent<K extends keyof ShiftEvents>(
   type: K,
@@ -42,7 +48,7 @@ export function describeEvent<K extends keyof ShiftEvents>(
     case 'player:caught': {
       const p = payload as ShiftEvents['player:caught'];
       return p.fired
-        ? { text: `${boss}: "That's three. You're FIRED."`, tone: 'bad' }
+        ? { text: `${boss}: "That's it. You're FIRED."`, tone: 'bad' }
         : {
             text: `Caught! Warning ${p.warnings} — ${p.confiscated.toFixed(2)} scrap confiscated`,
             tone: 'bad',
@@ -62,6 +68,21 @@ export function describeEvent<K extends keyof ShiftEvents>(
       return { text: 'Found your sleepy coworker — they cover for you. +1 heart', tone: 'good' };
     case 'ability:ready':
       return { text: 'Ability ready', tone: 'info' };
+    case 'player:talkedOut': {
+      const p = payload as ShiftEvents['player:talkedOut'];
+      return {
+        text: `Smooth talk! No warning, but ${p.confiscated.toFixed(2)} scrap confiscated`,
+        tone: 'warn',
+      };
+    }
+    case 'gadget:used': {
+      const p = payload as ShiftEvents['gadget:used'];
+      return GADGET_MESSAGES[p.id] ?? null;
+    }
+    case 'gadget:failed': {
+      const p = payload as ShiftEvents['gadget:failed'];
+      return { text: p.reason, tone: 'warn' };
+    }
     default:
       return null;
   }

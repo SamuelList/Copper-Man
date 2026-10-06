@@ -4,6 +4,7 @@ import { randomSeed } from '@core/util/rng';
 import { GameView } from '@game/GameView';
 import { useAppStore } from '@state/appStore';
 import { useCareerStore } from '@state/careerStore';
+import { useInputMode } from '@state/inputMode';
 import { useShiftStore } from '@state/shiftStore';
 import { useCallback, useState } from 'react';
 import { Button, Kbd, Panel } from '../components';
@@ -13,6 +14,7 @@ import styles from './screens.module.css';
 function PauseOverlay() {
   const setPaused = useShiftStore((s) => s.setPaused);
   const controller = useShiftStore((s) => s.controller);
+  const touch = useInputMode((s) => s.mode === 'touch');
   return (
     <div className={styles.overlay} role="dialog" aria-label="Paused">
       <Panel className={styles.pauseBox}>
@@ -29,10 +31,17 @@ function PauseOverlay() {
         >
           Clock out early
         </Button>
-        <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
-          <Kbd>WASD</Kbd> move · <Kbd>Shift</Kbd> sprint · <Kbd>E</Kbd> interact · <Kbd>C</Kbd>{' '}
-          crouch · <Kbd>Q</Kbd> ability · <Kbd>Wheel</Kbd> zoom · <Kbd>Esc</Kbd> pause
-        </p>
+        {touch ? (
+          <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
+            Drag on the left to walk; push to the edge to sprint. Hold ✋ to scrap, unlock and sell.
+            Tap gadgets to use them.
+          </p>
+        ) : (
+          <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
+            <Kbd>WASD</Kbd> move · <Kbd>Shift</Kbd> sprint · <Kbd>E</Kbd> interact · <Kbd>C</Kbd>{' '}
+            crouch · <Kbd>Q</Kbd> ability · <Kbd>1</Kbd>-<Kbd>3</Kbd> gadgets · <Kbd>Esc</Kbd> pause
+          </p>
+        )}
       </Panel>
     </div>
   );
@@ -50,6 +59,8 @@ export function ShiftScreen() {
       level: LEVELS.get(DEFAULT_LEVEL_ID),
       characterId: career.characterId ?? 'dalton',
       ownedUpgrades: [...career.ownedUpgrades],
+      skills: [...career.skills],
+      inventory: { ...career.inventory },
       day: career.day,
       warnings: career.warnings,
       seed: randomSeed(),

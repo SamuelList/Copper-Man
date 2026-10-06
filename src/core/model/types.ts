@@ -7,7 +7,8 @@ export type MetalId = 'copper' | 'brass' | 'aluminum' | 'steel';
 export type Trade = 'plumbing' | 'hvac';
 export type FixtureType = Trade | 'free';
 export type StatLevel = 1 | 2 | 3;
-export type UpgradeCategory = 'boots' | 'tools' | 'bag' | 'keys';
+export type UpgradeCategory =
+  'boots' | 'tools' | 'bag' | 'keys' | 'gloves' | 'clipboard' | 'radio' | 'contract';
 
 export interface Vec2 {
   x: number;
@@ -100,17 +101,43 @@ export interface PropDef {
   color: number;
 }
 
-export interface UpgradeEffect {
-  /** Multiplies walk + sprint speed. */
+/**
+ * Everything gear and skills can change. `…Mult` fields multiply together; the rest add up.
+ * Detection multipliers below 1 make you harder to notice.
+ */
+export interface Modifiers {
+  /** Walk + sprint speed. */
   speedMult?: number;
-  /** Extra sprint stamina in seconds. */
+  /** Extra sprint stamina, seconds. */
   staminaBonus?: number;
-  /** Multiplies scrapping speed. */
+  staminaRegenMult?: number;
   scrapRateMult?: number;
-  /** Extra bag capacity in scrap units. */
+  /** Extra bag capacity, scrap units. */
   capacityBonus?: number;
-  /** Seconds removed from door unlock time. */
+  /** Seconds off door unlock time. */
   unlockReduction?: number;
+  /** How fast anyone notices you, overall. */
+  noticeMult?: number;
+  /** How fast anyone notices you scrapping. */
+  scrapNoticeMult?: number;
+  /** How fast anyone notices you carrying scrap. */
+  carryNoticeMult?: number;
+  /** How quickly a detection meter drains once you're out of view. */
+  decayMult?: number;
+  /** 0..1: how much better darkness hides you. */
+  darkBonus?: number;
+  crouchSpeedMult?: number;
+  /** Extra footstep-hearing range, tiles. */
+  hearingBonus?: number;
+  saleMult?: number;
+  /** Fraction off hardware-store prices. */
+  shopDiscount?: number;
+  /** Fixture recharge time (below 1 = faster). */
+  rechargeMult?: number;
+  shiftBonusSeconds?: number;
+  extraHearts?: number;
+  /** Catches per shift that end in a talking-to instead of a warning. */
+  catchForgiveness?: number;
 }
 
 export interface UpgradeDef {
@@ -121,7 +148,40 @@ export interface UpgradeDef {
   name: string;
   description: string;
   cost: number;
-  effect: UpgradeEffect;
+  effect: Modifiers;
+}
+
+/** Single-use gadgets bought between shifts and used with a hotkey/button during one. */
+export interface ConsumableDef {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  maxStack: number;
+  /** Keyboard key that uses it. */
+  hotkey: string;
+  icon: string;
+}
+
+export interface SkillTreeDef {
+  id: string;
+  name: string;
+  blurb: string;
+  color: number;
+}
+
+export interface SkillDef {
+  id: string;
+  tree: string;
+  /** Row in its tree, from 1 (root) downward. */
+  tier: number;
+  name: string;
+  description: string;
+  /** Skill points to unlock. */
+  cost: number;
+  /** Unlocked once ANY of these is owned (empty = tree root). */
+  requires: string[];
+  effect: Modifiers;
 }
 
 export interface NpcDef {
@@ -149,9 +209,25 @@ export interface EffectiveStats {
   walkSpeed: number;
   sprintSpeed: number;
   staminaSeconds: number;
+  staminaRegenMult: number;
   scrapRateMult: number;
   bagCapacity: number;
   unlockSeconds: number;
+  /** Crouch-walk speed as a fraction of walking speed. */
+  crouchSpeedFactor: number;
+  noticeMult: number;
+  scrapNoticeMult: number;
+  carryNoticeMult: number;
+  decayMult: number;
+  darkBonus: number;
+  /** Footstep hearing range, pixels. */
+  hearingRange: number;
+  saleMult: number;
+  shopDiscount: number;
+  rechargeMult: number;
+  shiftSeconds: number;
+  maxWarnings: number;
+  catchForgiveness: number;
 }
 
 export type BagContents = Record<MetalId, number>;

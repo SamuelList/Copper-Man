@@ -1,12 +1,15 @@
 import { BALANCE } from '../content/balance';
 
-/** Three warnings and you're fired. Hearts = warnings remaining. */
-export function addWarning(warnings: number): { warnings: number; fired: boolean } {
-  const next = Math.min(BALANCE.warnings.max, warnings + 1);
-  return { warnings: next, fired: next >= BALANCE.warnings.max };
+/** Out of warnings (hearts) and you're fired. */
+export function addWarning(
+  warnings: number,
+  max: number = BALANCE.warnings.max,
+): { warnings: number; fired: boolean } {
+  const next = Math.min(max, warnings + 1);
+  return { warnings: next, fired: next >= max };
 }
 
 /** Finding the sleepy coworker recovers one heart. */
 export const recoverHeart = (warnings: number) => Math.max(0, warnings - 1);
 
-export const heartsLeft = (warnings: number) => BALANCE.warnings.max - warnings;
+export const heartsLeft = (warnings: number, max: number = BALANCE.warnings.max) => max - warnings;

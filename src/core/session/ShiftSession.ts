@@ -4,6 +4,7 @@ import { createStudent, updateStudent, type StudentState } from '../ai/studentBr
 import { ABILITIES } from '../content/abilities';
 import { BALANCE, TILE_SIZE } from '../content/balance';
 import { CHARACTERS } from '../content/characters';
+import { CONSUMABLES } from '../content/consumables';
 import { FIXTURES } from '../content/fixtures';
 import { emptyContents, METAL_IDS } from '../content/metals';
 import { NPCS } from '../content/npcs';
@@ -28,9 +29,9 @@ import { steerMove, type Detour } from '../systems/movement';
 import { rollRecharge, rollYield, scrapDuration } from '../systems/scrapping';
 import { deriveStats } from '../systems/stats';
 import { detectionRate, effectiveRange } from '../systems/detection';
-import { hasLineOfSight, inCone, lineOfSight, type ViewCone } from '../systems/vision';
+import { castRay, hasLineOfSight, inCone, lineOfSight, type ViewCone } from '../systems/vision';
 import { addWarning, recoverHeart } from '../systems/warnings';
-import { deg, dist, round2 } from '../util/math';
+import { angleTo, deg, dist, round2 } from '../util/math';
 import { createRng, type Rng } from '../util/rng';
 import { LevelGrid } from './levelGrid';
 import type {
@@ -46,6 +47,7 @@ import type {
   ShiftSnapshot,
   ShiftStatus,
   ShiftSummary,
+  XpLine,
 } from './types';
 
 interface ActiveInteraction {
@@ -95,6 +97,12 @@ export class ShiftSession {
   private readonly rng: Rng;
   private readonly bossNav: NavContext;
   private readonly studentNav: NavContext;
+  /** Gadgets on hand this shift. */
+  readonly inventory: Record<string, number>;
+  /** A noise (whoopee cushion) for the boss to investigate next tick. */
+  private pendingNoise: Vec2 | null = null;
+  /** Catches left this shift that end in a talking-to (Smooth Talker). */
+  private forgiveness: number;
   private tally = {
     earned: 0,
     unitsSold: 0,
@@ -103,18 +111,21 @@ export class ShiftSession {
     timesCaught: 0,
     coworkerFound: false,
     maxEscalation: 0,
+    xp: [] as XpLine[],
   };
 
   constructor(config: ShiftConfig) {
     this.level = config.level;
     this.day = config.day;
     this.warnings = config.warnings;
-    this.duration = config.durationSeconds ?? BALANCE.shift.durationSeconds;
     this.rng = createRng(config.seed);
     this.grid = new LevelGrid(config.level, TILE_SIZE);
     this.character = CHARACTERS.get(config.characterId);
     this.ability = this.character.abilityId ? ABILITIES.get(this.character.abilityId) : null;
-    this.stats = deriveStats(this.character, config.ownedUpgrades);
+    this.stats = deriveStats(this.character, config.ownedUpgrades, config.skills ?? []);
+    this.duration = config.durationSeconds ?? this.stats.shiftSeconds;
+    this.forgiveness = this.stats.catchForgiveness;
+    this.inventory = { ...(config.inventory ?? {}) };
     this.bag = createBag(this.stats.bagCapacity);
 
     const nav = { cols: this.grid.cols, rows: this.grid.rows, tileSize: TILE_SIZE };
@@ -133,6 +144,7 @@ export class ShiftSession {
       grace: 0,
       abilityActive: 0,
       abilityCooldown: 0,
+      boost: 0,
     };
     this.boss = createBoss(this.level.bossRoute, TILE_SIZE);
     this.students = this.level.studentSpawns.map((s, i) => {
@@ -196,9 +208,27 @@ export class ShiftSession {
     );
   }
 
-  /** Out of sight but close enough to hear (footsteps). */
+  /** Out of sight but close enough to hear (footsteps). Radios extend the range. */
   canHear(pos: Vec2): boolean {
-    return dist(this.player.pos, pos) <= BALANCE.npc.hearingRange;
+    return dist(this.player.pos, pos) <= this.stats.hearingRange;
+  }
+
+  get maxWarnings() {
+    return this.stats.maxWarnings;
+  }
+
+  get xpEarned() {
+    return this.tally.xp.reduce((sum, l) => sum + l.amount, 0);
+  }
+
+  /** Award XP. Lines with the same label are merged so the summary stays short. */
+  private gainXp(amount: number, label: string) {
+    const rounded = Math.round(amount);
+    if (rounded <= 0) return;
+    const line = this.tally.xp.find((l) => l.label === label);
+    if (line) line.amount += rounded;
+    else this.tally.xp.push({ label, amount: rounded });
+    this.events.emit('xp:gained', { amount: rounded, reason: label });
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -212,6 +242,7 @@ export class ShiftSession {
     this.elapsed += dt;
 
     this.updateAbility(dt, input);
+    if (input.use) this.useGadget(input.use);
     this.updatePlayerMovement(dt, input);
     this.updateInteraction(dt, input);
     this.updateFixtures(dt);
@@ -245,9 +276,49 @@ export class ShiftSession {
     }
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Gadgets
+  // ---------------------------------------------------------------------------------------------
+
+  private useGadget(id: string) {
+    if ((this.inventory[id] ?? 0) <= 0 || !CONSUMABLES.has(id)) return;
+    const p = this.player;
+    switch (id) {
+      case 'energy-drink':
+        p.stamina = this.stats.staminaSeconds;
+        p.boost = BALANCE.gadgets.energyDrinkSeconds;
+        break;
+      case 'whoopee-cushion': {
+        // Lands up to a few tiles ahead, stopping short of walls.
+        const range = BALANCE.gadgets.throwRange;
+        const d = Math.max(0, castRay(this.grid, p.pos, p.facing, range) - TILE_SIZE * 0.4);
+        this.pendingNoise = {
+          x: p.pos.x + Math.cos(p.facing) * d,
+          y: p.pos.y + Math.sin(p.facing) * d,
+        };
+        this.events.emit('noise:made', { pos: { ...this.pendingNoise } });
+        break;
+      }
+      case 'bolt-cutters': {
+        const target = this.focus;
+        if (target?.kind !== 'door') {
+          this.events.emit('gadget:failed', { id, reason: 'Stand next to a locked door first' });
+          return;
+        }
+        this.unlockDoor(target.id, 'player');
+        break;
+      }
+      default:
+        return;
+    }
+    this.inventory[id] = (this.inventory[id] ?? 0) - 1;
+    this.events.emit('gadget:used', { id, pos: { ...p.pos } });
+  }
+
   private updatePlayerMovement(dt: number, input: PlayerInput) {
     const p = this.player;
     p.grace = Math.max(0, p.grace - dt);
+    p.boost = Math.max(0, p.boost - dt);
     let mx = input.moveX;
     let my = input.moveY;
     const len = Math.hypot(mx, my);
@@ -260,12 +331,16 @@ export class ShiftSession {
     p.crouching = input.crouch;
     p.sprinting = p.moving && input.sprint && !p.crouching && p.stamina > 0;
     if (p.sprinting) {
-      p.stamina = Math.max(0, p.stamina - dt);
+      // Energy drinks make sprinting free while they last.
+      if (p.boost <= 0) p.stamina = Math.max(0, p.stamina - dt);
       p.staminaDelay = P.staminaRegenDelay;
     } else if (p.staminaDelay > 0) {
       p.staminaDelay = Math.max(0, p.staminaDelay - dt);
     } else {
-      p.stamina = Math.min(this.stats.staminaSeconds, p.stamina + P.staminaRegenPerSecond * dt);
+      p.stamina = Math.min(
+        this.stats.staminaSeconds,
+        p.stamina + P.staminaRegenPerSecond * this.stats.staminaRegenMult * dt,
+      );
     }
 
     if (!p.moving) {
@@ -273,7 +348,7 @@ export class ShiftSession {
       return;
     }
     const speed = p.crouching
-      ? this.stats.walkSpeed * P.crouchSpeedMult
+      ? this.stats.walkSpeed * this.stats.crouchSpeedFactor
       : p.sprinting
         ? this.stats.sprintSpeed
         : this.stats.walkSpeed;
@@ -388,6 +463,9 @@ export class ShiftSession {
     }
     this.interaction.target = target;
     this.interaction.elapsed += dt;
+    // Turn to face whatever you're working on.
+    if (dist(this.player.pos, target.pos) > 1)
+      this.player.facing = angleTo(this.player.pos, target.pos);
     if (this.interaction.elapsed >= target.duration) {
       this.interaction = null;
       this.interactLatched = true;
@@ -416,7 +494,7 @@ export class ShiftSession {
     const result = addToBag(this.bag, f.def.metal, amount);
     this.bag = result.bag;
     this.tally.unitsCollected = round2(this.tally.unitsCollected + result.added);
-    f.rechargeTotal = rollRecharge(f.def, this.rng);
+    f.rechargeTotal = rollRecharge(f.def, this.rng) * this.stats.rechargeMult;
     f.rechargeLeft = f.rechargeTotal;
     this.events.emit('scrap:collected', {
       fixtureId: f.id,
@@ -425,6 +503,7 @@ export class ShiftSession {
       amount: result.added,
       overflow: result.overflow,
     });
+    this.gainXp(BALANCE.xp.perScrap, 'Scrapping');
   }
 
   private unlockDoor(doorId: string, by: 'player' | 'boss') {
@@ -433,19 +512,21 @@ export class ShiftSession {
     door.locked = false;
     this.grid.unlock(door.tile.col, door.tile.row);
     this.events.emit('door:unlocked', { doorId, by });
+    if (by === 'player') this.gainXp(BALANCE.xp.perDoor, 'Locked doors');
   }
 
   private sellScrap() {
     const contents: BagContents = { ...this.bag.contents };
     const units = bagTotal(this.bag);
     if (units <= 0) return;
-    const value = saleValue(contents);
+    const value = saleValue(contents, this.stats.saleMult);
     this.bag = emptyBag(this.bag);
     const s = this.tally;
     s.earned += value;
     s.unitsSold = round2(s.unitsSold + units);
     for (const m of METAL_IDS) s.soldByMetal[m] = round2(s.soldByMetal[m] + contents[m]);
     this.events.emit('scrap:sold', { units, value, contents });
+    this.gainXp(value * BALANCE.xp.perDollar, 'Sales');
   }
 
   private wakeCoworker() {
@@ -454,6 +535,7 @@ export class ShiftSession {
     this.tally.coworkerFound = true;
     this.warnings = recoverHeart(this.warnings);
     this.events.emit('coworker:found', { warnings: this.warnings });
+    this.gainXp(BALANCE.xp.coworker, 'Woke your coworker');
   }
 
   private updateFixtures(dt: number) {
@@ -486,8 +568,15 @@ export class ShiftSession {
    * (0 when the player isn't in view). Accounts for range, cone, walls, crouching behind low
    * cover, the near/far zones, and how dark it is where the player stands.
    */
-  private perceive(cone: ViewCone, fillRate: number): { sees: boolean; rate: number } {
-    const light = this.playerLight;
+  private perceive(
+    cone: ViewCone,
+    fillRate: number,
+    signals: { carrying: boolean; scrapping: boolean },
+  ): { sees: boolean; rate: number } {
+    const st = this.stats;
+    // Night Owl etc.: darkness counts for more.
+    const raw = this.playerLight;
+    const light = Math.max(0, raw - st.darkBonus * (1 - raw));
     const range = effectiveRange(cone.range, light);
     const target = this.player.pos;
     const distance = dist(cone.pos, target);
@@ -495,7 +584,14 @@ export class ShiftSession {
       distance <= range &&
       inCone({ ...cone, range }, target) &&
       lineOfSight(this.grid, cone.pos, target, this.player.crouching);
-    return { sees, rate: sees ? detectionRate({ distance, range, fillRate, light }) : 0 };
+    if (!sees) return { sees, rate: 0 };
+    // Gear and skills that make what you're doing less noticeable; the most visible signal wins.
+    const signalMult = Math.max(
+      signals.carrying ? st.carryNoticeMult : 0,
+      signals.scrapping ? st.scrapNoticeMult : 0,
+    );
+    const base = detectionRate({ distance, range, fillRate, light });
+    return { sees, rate: base * st.noticeMult * signalMult };
   }
 
   bossCone(): ViewCone {
@@ -520,13 +616,14 @@ export class ShiftSession {
     for (const s of this.students) {
       // Students snitch on scrapping, not on someone walking by with a bag.
       const seen = this.suspicion.scrapping
-        ? this.perceive(this.studentCone(s), fillRate)
+        ? this.perceive(this.studentCone(s), fillRate, { carrying: false, scrapping: true })
         : { sees: false, rate: 0 };
       const shouted = updateStudent(s, {
         dt,
         nav: this.studentNav,
         sees: seen.sees,
         rate: seen.rate,
+        decay: V.decayRate * this.stats.decayMult,
         playerPos: this.player.pos,
         rng: this.rng,
         tuning,
@@ -541,8 +638,11 @@ export class ShiftSession {
 
   private updateBoss(dt: number, alert: Vec2 | null) {
     const seen = this.isSuspicious
-      ? this.perceive(this.bossCone(), V.fillRate[NPCS.boss.awareness])
+      ? this.perceive(this.bossCone(), V.fillRate[NPCS.boss.awareness], this.suspicion)
       : { sees: false, rate: 0 };
+    // A whoopee cushion counts as something to check out (unless a student already shouted).
+    alert = alert ?? this.pendingNoise;
+    this.pendingNoise = null;
     const result = updateBoss(this.boss, {
       dt,
       nav: this.bossNav,
@@ -551,6 +651,7 @@ export class ShiftSession {
       rate: seen.rate,
       playerPos: this.player.pos,
       alert,
+      decay: V.decayRate * this.stats.decayMult,
       speedMult: bossSpeedMult(this.escalationInput()),
       tuning: { walkSpeed: BALANCE.npc.walkSpeed[NPCS.boss.speed] },
     });
@@ -583,19 +684,26 @@ export class ShiftSession {
     }
     const confiscated = bagTotal(this.bag);
     this.bag = emptyBag(this.bag);
-    const { warnings, fired } = addWarning(this.warnings);
-    this.warnings = warnings;
-    this.tally.timesCaught++;
     sendBossBackToPatrol(this.boss);
-    this.events.emit('player:caught', { warnings, fired, confiscated });
-    if (fired) {
-      this.end('fired');
-      return;
+    if (this.forgiveness > 0) {
+      // Smooth Talker: the scrap is gone, but the warning isn't written up.
+      this.forgiveness--;
+      this.events.emit('player:talkedOut', { confiscated });
+    } else {
+      const { warnings, fired } = addWarning(this.warnings, this.stats.maxWarnings);
+      this.warnings = warnings;
+      this.tally.timesCaught++;
+      this.events.emit('player:caught', { warnings, fired, confiscated });
+      if (fired) {
+        this.end('fired');
+        return;
+      }
     }
     // Escorted back to the van.
     const spawn = this.level.playerSpawn;
     p.pos = tileCenter(TILE_SIZE, spawn.col, spawn.row);
     p.grace = P.caughtGraceSeconds;
+    this.detour = null;
   }
 
   private escalationInput() {
@@ -623,6 +731,10 @@ export class ShiftSession {
     this.status = 'ended';
     this.interaction = null;
     const s = this.tally;
+    if (reason !== 'fired') {
+      this.gainXp(BALANCE.xp.shiftComplete, 'Finished the shift');
+      if (s.timesCaught === 0) this.gainXp(BALANCE.xp.cleanShift, 'Never caught');
+    }
     this.summary = {
       day: this.day,
       endedBy: reason,
@@ -636,6 +748,9 @@ export class ShiftSession {
       timesCaught: s.timesCaught,
       coworkerFound: s.coworkerFound,
       maxEscalation: s.maxEscalation,
+      xp: s.xp.map((l) => ({ ...l })),
+      xpTotal: this.xpEarned,
+      inventory: { ...this.inventory },
     };
     this.events.emit('shift:ended', this.summary);
   }
@@ -661,7 +776,7 @@ export class ShiftSession {
       timeLeft: this.timeLeft,
       duration: this.duration,
       warnings: this.warnings,
-      maxWarnings: BALANCE.warnings.max,
+      maxWarnings: this.stats.maxWarnings,
       earned: this.tally.earned,
       bag: { capacity: this.bag.capacity, contents: { ...this.bag.contents } },
       roomName: roomAt(this.level, tile.col, tile.row)?.name ?? 'Doorway',
@@ -698,6 +813,9 @@ export class ShiftSession {
       grace: p.grace,
       crouching: p.crouching,
       light: this.playerLight,
+      xp: this.xpEarned,
+      inventory: { ...this.inventory },
+      boost: p.boost,
     };
   }
 }

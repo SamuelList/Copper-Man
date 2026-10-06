@@ -14,6 +14,7 @@
   --warn: #ffb74d;
   --bad: #ef5350;
   --info: #64b5f6;
+  --xp: #b39ddb;
   --dalton: #4caf50;
   --tomothy: #29b6f6;
   --dunkin: #ef5350;
@@ -37,16 +38,29 @@ body,
   height: 100%;
 }
 
+/* Fill the visible screen on phones, where 100vh hides under the browser's toolbars. */
+#root {
+  height: 100dvh;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button {
   font: inherit;
+  touch-action: manipulation;
 }
 
 :focus-visible {

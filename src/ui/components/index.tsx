@@ -76,3 +76,81 @@ export function StatBar({
 export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className={styles.kbd}>{children}</kbd>;
 }
+
+/** Remaining hearts filled, lost hearts faded. */
+export function Hearts({ warnings, max }: { warnings: number; max: number }) {
+  const left = Math.max(0, max - warnings);
+  return (
+    <span className={styles.hearts} role="img" aria-label={`${left} of ${max} hearts`}>
+      {'♥'.repeat(left)}
+      <span className={styles.heartLost}>{'♥'.repeat(Math.max(0, max - left))}</span>
+    </span>
+  );
+}
+
+/** Level chip with a progress bar toward the next level. */
+export function LevelBadge({
+  level,
+  xp,
+  next,
+  points = 0,
+}: {
+  level: number;
+  xp: number;
+  next: number;
+  points?: number;
+}) {
+  return (
+    <span className={styles.level} data-testid="level">
+      <span className={styles.levelNum}>Lv {level}</span>
+      <span
+        className={styles.xpTrack}
+        role="progressbar"
+        aria-label="Experience"
+        aria-valuenow={xp}
+        aria-valuemin={0}
+        aria-valuemax={next}
+      >
+        <span className={styles.xpFill} style={{ width: `${Math.min(100, (xp / next) * 100)}%` }} />
+      </span>
+      <span className={styles.xpText}>
+        {xp}/{next} XP
+      </span>
+      {points > 0 && (
+        <span className={styles.points} title="Unspent skill points">
+          +{points} skill {points === 1 ? 'point' : 'points'}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Segmented tab bar. Keeps a big touch target on phones. */
+export function Tabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  label,
+}: {
+  tabs: readonly { id: T; label: ReactNode }[];
+  value: T;
+  onChange(id: T): void;
+  label: string;
+}) {
+  return (
+    <div className={styles.tabs} role="tablist" aria-label={label}>
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={t.id === value}
+          className={[styles.tab, t.id === value && styles.tabActive].filter(Boolean).join(' ')}
+          onClick={() => onChange(t.id)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}

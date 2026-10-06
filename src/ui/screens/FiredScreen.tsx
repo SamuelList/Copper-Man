@@ -8,7 +8,7 @@ import styles from './screens.module.css';
 
 export function FiredScreen() {
   const go = useAppStore((s) => s.go);
-  const { day, totalEarned, characterId, reset } = useCareerStore();
+  const { day, totalEarned, characterId, level, reset } = useCareerStore();
   const name = CHARACTERS.find(characterId ?? '')?.name ?? 'You';
 
   return (
@@ -20,12 +20,14 @@ export function FiredScreen() {
         FIRED
       </h1>
       <p className={styles.subtitle}>
-        &quot;Three strikes, {name}. Clean out your locker.&quot; — {NPCS.boss.name}
+        &quot;That&apos;s your last warning, {name}. Clean out your locker.&quot; — {NPCS.boss.name}
       </p>
       <Panel style={{ width: 'min(380px, 100%)' }}>
         <dl className={styles.statsGrid}>
           <dt>Days on the job</dt>
           <dd>{day}</dd>
+          <dt>Level reached</dt>
+          <dd style={{ color: 'var(--xp)' }}>{level}</dd>
           <dt>Total scrap sold</dt>
           <dd style={{ color: 'var(--good)' }}>{money(totalEarned)}</dd>
         </dl>

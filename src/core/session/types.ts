@@ -6,6 +6,10 @@ export interface ShiftConfig {
   level: LevelDef;
   characterId: string;
   ownedUpgrades: readonly string[];
+  /** Learned skill ids. */
+  skills?: readonly string[];
+  /** Gadgets brought along: id → count. */
+  inventory?: Readonly<Record<string, number>>;
   day: number;
   /** Warnings carried in from previous shifts. */
   warnings: number;
@@ -24,6 +28,8 @@ export interface PlayerInput {
   ability: boolean;
   /** Desired crouch state (the input layer handles toggling). */
   crouch: boolean;
+  /** Gadget used this frame (consumable id). */
+  use?: string | null;
 }
 
 export interface PlayerState {
@@ -38,6 +44,8 @@ export interface PlayerState {
   grace: number;
   abilityActive: number;
   abilityCooldown: number;
+  /** Seconds of free sprinting left (energy drink). */
+  boost: number;
 }
 
 export interface FixtureState {
@@ -95,6 +103,16 @@ export interface ShiftSummary {
   timesCaught: number;
   coworkerFound: boolean;
   maxEscalation: number;
+  /** XP earned, line by line (includes end-of-shift bonuses). */
+  xp: XpLine[];
+  xpTotal: number;
+  /** Gadgets left over (carry back into the career inventory). */
+  inventory: Record<string, number>;
+}
+
+export interface XpLine {
+  label: string;
+  amount: number;
 }
 
 export interface ShiftEvents {
@@ -117,6 +135,11 @@ export interface ShiftEvents {
   'ability:activated': { abilityId: string };
   'ability:ready': { abilityId: string };
   'shift:ended': ShiftSummary;
+  'xp:gained': { amount: number; reason: string };
+  'gadget:used': { id: string; pos: Vec2 };
+  'gadget:failed': { id: string; reason: string };
+  'noise:made': { pos: Vec2 };
+  'player:talkedOut': { confiscated: number };
 }
 
 export interface PromptSnapshot {
@@ -162,4 +185,9 @@ export interface ShiftSnapshot {
   crouching: boolean;
   /** Light level where the player stands (0 dark..1 lit). */
   light: number;
+  /** XP earned so far this shift. */
+  xp: number;
+  inventory: Record<string, number>;
+  /** Seconds of free sprint left from an energy drink. */
+  boost: number;
 }

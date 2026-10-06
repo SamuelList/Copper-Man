@@ -1,6 +1,13 @@
-import { BALANCE } from '../content/balance';
+import { BALANCE, TILE_SIZE } from '../content/balance';
+import { SKILLS } from '../content/skills';
 import { UPGRADES } from '../content/upgrades';
-import type { CharacterDef, EffectiveStats, UpgradeCategory, UpgradeDef } from '../model/types';
+import type {
+  CharacterDef,
+  EffectiveStats,
+  Modifiers,
+  UpgradeCategory,
+  UpgradeDef,
+} from '../model/types';
 
 /** Highest owned tier per category — tiers replace each other rather than stack. */
 export function activeUpgrades(
@@ -16,21 +23,87 @@ export function activeUpgrades(
   return active;
 }
 
-export function deriveStats(character: CharacterDef, owned: readonly string[]): EffectiveStats {
-  const up = activeUpgrades(owned);
-  const speedMult = up.boots?.effect.speedMult ?? 1;
-  const walkSpeed = BALANCE.player.walkSpeed[character.stats.speed] * speedMult;
-  const unlockSeconds = Math.max(
-    BALANCE.doors.minUnlockSeconds,
-    BALANCE.doors.baseUnlockSeconds - (up.keys?.effect.unlockReduction ?? 0),
-  );
+const MULTIPLIED = new Set<keyof Modifiers>([
+  'speedMult',
+  'staminaRegenMult',
+  'scrapRateMult',
+  'noticeMult',
+  'scrapNoticeMult',
+  'carryNoticeMult',
+  'decayMult',
+  'crouchSpeedMult',
+  'saleMult',
+  'rechargeMult',
+]);
+
+/** Fold a list of modifiers together: `…Mult` fields multiply, everything else adds. */
+export function combineModifiers(list: readonly Modifiers[]): Required<Modifiers> {
+  const out: Record<string, number> = {};
+  for (const key of [
+    'speedMult',
+    'staminaBonus',
+    'staminaRegenMult',
+    'scrapRateMult',
+    'capacityBonus',
+    'unlockReduction',
+    'noticeMult',
+    'scrapNoticeMult',
+    'carryNoticeMult',
+    'decayMult',
+    'darkBonus',
+    'crouchSpeedMult',
+    'hearingBonus',
+    'saleMult',
+    'shopDiscount',
+    'rechargeMult',
+    'shiftBonusSeconds',
+    'extraHearts',
+    'catchForgiveness',
+  ] as (keyof Modifiers)[]) {
+    out[key] = MULTIPLIED.has(key) ? 1 : 0;
+  }
+  for (const m of list) {
+    for (const [key, value] of Object.entries(m) as [keyof Modifiers, number][]) {
+      if (value === undefined) continue;
+      out[key] = MULTIPLIED.has(key) ? out[key]! * value : out[key]! + value;
+    }
+  }
+  return out as Required<Modifiers>;
+}
+
+/** Everything a worker brings to a shift: base stats + best gear in each category + skills. */
+export function deriveStats(
+  character: CharacterDef,
+  ownedUpgrades: readonly string[],
+  skills: readonly string[] = [],
+): EffectiveStats {
+  const gear = Object.values(activeUpgrades(ownedUpgrades)).map((u) => u.effect);
+  const learned = skills.map((id) => SKILLS.find(id)?.effect).filter((e) => e !== undefined);
+  const m = combineModifiers([...gear, ...learned]);
+  const walkSpeed = BALANCE.player.walkSpeed[character.stats.speed] * m.speedMult;
   return {
     walkSpeed,
     sprintSpeed: walkSpeed * BALANCE.player.sprintMult,
-    staminaSeconds: BALANCE.player.staminaSeconds + (up.boots?.effect.staminaBonus ?? 0),
-    scrapRateMult: up.tools?.effect.scrapRateMult ?? 1,
-    bagCapacity:
-      BALANCE.bag.capacityByCarry[character.stats.carry] + (up.bag?.effect.capacityBonus ?? 0),
-    unlockSeconds,
+    staminaSeconds: BALANCE.player.staminaSeconds + m.staminaBonus,
+    staminaRegenMult: m.staminaRegenMult,
+    scrapRateMult: m.scrapRateMult,
+    bagCapacity: BALANCE.bag.capacityByCarry[character.stats.carry] + m.capacityBonus,
+    unlockSeconds: Math.max(
+      BALANCE.doors.minUnlockSeconds,
+      BALANCE.doors.baseUnlockSeconds - m.unlockReduction,
+    ),
+    crouchSpeedFactor: Math.min(1, BALANCE.player.crouchSpeedMult * m.crouchSpeedMult),
+    noticeMult: m.noticeMult,
+    scrapNoticeMult: m.scrapNoticeMult,
+    carryNoticeMult: m.carryNoticeMult,
+    decayMult: m.decayMult,
+    darkBonus: Math.min(1, m.darkBonus),
+    hearingRange: BALANCE.npc.hearingRange + m.hearingBonus * TILE_SIZE,
+    saleMult: m.saleMult,
+    shopDiscount: Math.min(0.9, m.shopDiscount),
+    rechargeMult: m.rechargeMult,
+    shiftSeconds: BALANCE.shift.durationSeconds + m.shiftBonusSeconds,
+    maxWarnings: BALANCE.warnings.max + m.extraHearts,
+    catchForgiveness: m.catchForgiveness,
   };
 }

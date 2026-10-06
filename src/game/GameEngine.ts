@@ -75,6 +75,8 @@ export class GameEngine {
   private frame = 0;
   private last = performance.now();
   private accumulator = 0;
+  private pendingAbility = false;
+  private pendingUse: string | null = null;
   private endTimer: number | undefined;
   private destroyed = false;
 
@@ -139,7 +141,6 @@ export class GameEngine {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
     this.resize();
-    host.addEventListener('wheel', this.onWheel, { passive: false });
     window.addEventListener('blur', this.onBlur);
 
     if (debugHooksEnabled()) {
@@ -172,11 +173,6 @@ export class GameEngine {
     };
   }
 
-  private onWheel = (e: WheelEvent) => {
-    e.preventDefault();
-    this.iso.zoomBy(e.deltaY > 0 ? -1 : 1);
-  };
-
   private onBlur = () => {
     if (this.session.status === 'running') useShiftStore.getState().setPaused(true);
   };
@@ -198,13 +194,16 @@ export class GameEngine {
     if (this.input.pausePressed() && this.session.status === 'running') store.togglePause();
     if (!useShiftStore.getState().paused) {
       const input = this.input.read(this.iso);
+      // One-shot actions wait for the next simulation step (a fast display can draw a frame
+      // without stepping), then fire exactly once.
+      this.pendingAbility ||= input.ability;
+      this.pendingUse = input.use ?? this.pendingUse;
       this.accumulator = Math.min(this.accumulator + dt, STEP * MAX_STEPS_PER_FRAME);
-      let first = true;
       while (this.accumulator >= STEP) {
-        // Edge-triggered actions fire on the first sub-step only.
-        this.session.tick(STEP, first ? input : { ...input, ability: false });
+        this.session.tick(STEP, { ...input, ability: this.pendingAbility, use: this.pendingUse });
+        this.pendingAbility = false;
+        this.pendingUse = null;
         this.accumulator -= STEP;
-        first = false;
       }
     }
 
@@ -377,7 +376,6 @@ export class GameEngine {
     cancelAnimationFrame(this.frame);
     window.clearTimeout(this.endTimer);
     this.resizeObserver.disconnect();
-    this.host.removeEventListener('wheel', this.onWheel);
     window.removeEventListener('blur', this.onBlur);
     this.input.dispose();
     this.bridge.dispose();

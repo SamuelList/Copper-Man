@@ -3,10 +3,14 @@
   min-height: 100%;
   height: 100%;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: clamp(1rem, 4vw, 3rem) 1rem;
+  padding: max(clamp(1rem, 4vw, 3rem), env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right)) max(clamp(1rem, 4vw, 3rem), env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
   background:
     radial-gradient(ellipse at top, #d9822b22, transparent 60%),
     repeating-linear-gradient(45deg, #ffffff04 0 12px, transparent 12px 24px), var(--bg);
@@ -162,6 +166,8 @@
 
 .shift {
   position: relative;
+  touch-action: none;
+  overscroll-behavior: none;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -171,6 +177,7 @@
 .gameHost {
   position: absolute;
   inset: 0;
+  touch-action: none;
 }
 
 .overlay {
@@ -291,4 +298,330 @@
 
 .fired {
   color: var(--bad);
+}
+
+/* ---- Hardware store hub ---- */
+
+.hub {
+  padding-bottom: 0;
+}
+
+.hub .wallet {
+  margin-bottom: 0.75rem;
+}
+
+.hub .statLine {
+  margin-bottom: 1rem;
+}
+
+.tabBadge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.35em;
+  height: 1.35em;
+  margin-left: 0.4em;
+  padding: 0 0.3em;
+  border-radius: 999px;
+  background: var(--xp);
+  color: #1a1030;
+  font-size: 0.75em;
+}
+
+.tabBody {
+  width: 100%;
+  max-width: 1100px;
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tabIntro {
+  color: var(--text-dim);
+  text-align: center;
+  font-size: 0.9rem;
+  max-width: 40rem;
+  margin: 0 0 1rem;
+}
+
+.tabIntro strong {
+  color: var(--xp);
+}
+
+.stickyActions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  width: calc(100% + 2rem);
+  margin-top: 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, transparent, var(--bg) 35%);
+}
+
+.clockIn {
+  min-height: 48px;
+  min-width: min(260px, 60vw);
+  font-size: 1.05rem;
+}
+
+.oldPrice {
+  color: var(--text-dim);
+  font-weight: 400;
+  margin-right: 0.4em;
+}
+
+.gadget {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.gadgetIcon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.stock {
+  display: flex;
+  gap: 4px;
+}
+
+.stock span {
+  width: 18px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+}
+
+.stock .stockOn {
+  background: var(--copper-bright);
+  border-color: transparent;
+}
+
+.trees {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+.tree {
+  border-top: 4px solid var(--tree);
+}
+
+.tree h3 {
+  margin: 0;
+  color: var(--tree);
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}
+
+.tree > p {
+  margin: 0.1rem 0 0.9rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* Tiers stack top to bottom with a connector line between them. */
+.tier {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.5rem;
+  padding-top: 1rem;
+}
+
+.tier:first-of-type {
+  padding-top: 0;
+}
+
+.tier:not(:first-of-type)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 1rem;
+  background: color-mix(in srgb, var(--tree) 45%, transparent);
+}
+
+.skill {
+  appearance: none;
+  text-align: left;
+  display: grid;
+  gap: 0.3rem;
+  align-content: start;
+  padding: 0.65rem 0.7rem;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-sunken);
+  color: var(--text);
+  cursor: default;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.15s ease;
+}
+
+.skill_owned {
+  border-color: var(--tree);
+  background: color-mix(in srgb, var(--tree) 22%, var(--bg-sunken));
+}
+
+.skill_ready {
+  cursor: pointer;
+  border-color: var(--tree);
+  box-shadow:
+    0 0 0 1px var(--tree),
+    0 0 18px color-mix(in srgb, var(--tree) 35%, transparent);
+}
+
+.skill_ready:hover {
+  transform: translateY(-1px);
+}
+
+.skill_locked {
+  opacity: 0.45;
+}
+
+.skill_waiting {
+  opacity: 0.8;
+}
+
+.skillHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.skillCost {
+  color: var(--tree);
+  white-space: nowrap;
+}
+
+.skillDesc {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* ---- Summary XP ---- */
+
+.xpPanel {
+  width: min(440px, 100%);
+  margin-top: 1rem;
+}
+
+.xpPanel h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--xp);
+}
+
+.levelUp {
+  margin: 0 0 0.8rem;
+  padding: 0.7rem;
+  border-radius: 10px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: #1a1030;
+  background: linear-gradient(90deg, #9575cd, var(--xp), #9575cd);
+  animation: levelPop 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+.levelUp small {
+  display: block;
+  font-family: var(--font);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+@keyframes levelPop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .wallet {
+    gap: 0.8rem;
+  }
+
+  .walletCash {
+    font-size: 1.6rem;
+  }
+
+  .statLine {
+    gap: 0.35rem 0.8rem;
+    font-size: 0.78rem;
+  }
+
+  .shopGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .category .item {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .category .item .itemDesc {
+    grid-column: 1;
+  }
+
+  .category .item button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    min-height: 40px;
+  }
+}
+
+/* Landscape phones: reclaim vertical space. */
+@media (max-height: 500px) {
+  .screen {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+
+  .heading {
+    font-size: 1.4rem;
+  }
+
+  .title {
+    font-size: 2.6rem;
+  }
+
+  .subtitle {
+    margin: 0.5rem auto 1rem;
+    font-size: 0.95rem;
+  }
+
+  .wallet {
+    margin: 0.25rem 0 0.4rem;
+  }
+
+  .walletCash {
+    font-size: 1.5rem;
+  }
+
+  .hub .statLine {
+    margin-bottom: 0.6rem;
+  }
+
+  .stickyActions {
+    padding-top: 0.5rem;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  .clockIn {
+    min-height: 44px;
+  }
 }

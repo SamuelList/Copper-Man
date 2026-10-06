@@ -20,9 +20,22 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testMatch: 'game.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
-        // SwiftShader gives headless Chromium WebGL so Phaser uses its main renderer.
+        // SwiftShader gives headless Chromium WebGL for the Three.js renderer.
+        launchOptions: { executablePath, args: ['--enable-unsafe-swiftshader'] },
+      },
+    },
+    {
+      // A phone in landscape, with touch. Chromium (not WebKit) so the test can drive real
+      // multi-touch through the DevTools protocol.
+      name: 'iphone',
+      testMatch: 'mobile.spec.ts',
+      use: {
+        ...devices['iPhone 13 landscape'],
+        browserName: 'chromium',
+        deviceScaleFactor: 2,
         launchOptions: { executablePath, args: ['--enable-unsafe-swiftshader'] },
       },
     },

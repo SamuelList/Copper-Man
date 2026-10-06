@@ -1,0 +1,231 @@
+.touch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Left side of the screen, below the top HUD row: touch anywhere here to grab the stick. */
+.stickZone {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 50%;
+  top: 28%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.stickBase {
+  position: absolute;
+  left: calc(max(16px, env(safe-area-inset-left)) + 72px);
+  top: calc(100% - max(16px, env(safe-area-inset-bottom)) - 76px);
+  width: 124px;
+  height: 124px;
+  margin: -62px 0 0 -62px;
+  border-radius: 50%;
+  border: 2px solid #ffffff33;
+  background: radial-gradient(circle, #ffffff10 0 55%, #ffffff1c 56% 100%);
+  opacity: 0.45;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.stickBase[data-active='true'] {
+  opacity: 0.95;
+}
+
+.stickBase[data-sprint='true'] {
+  border-color: var(--warn);
+  box-shadow: 0 0 22px #ffb74d88;
+}
+
+.stickKnob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  margin: -29px 0 0 -29px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff, #c9ced6 60%, #8d949e);
+  box-shadow: 0 4px 12px #0008;
+}
+
+.actions {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.cluster {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.btn {
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #ffffff38;
+  background: rgb(18 20 26 / 0.72);
+  color: var(--text);
+  font-weight: 800;
+  box-shadow: 0 4px 14px #0007;
+  backdrop-filter: blur(4px);
+}
+
+.btn:active {
+  transform: scale(0.94);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+}
+
+.icon {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.caption {
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.small {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 4px;
+}
+
+.on {
+  border-color: var(--info);
+  background: rgb(30 70 110 / 0.8);
+}
+
+/* The big one, with a ring that fills while you work. */
+.interact {
+  width: 92px;
+  height: 92px;
+  border-width: 0;
+  background:
+    radial-gradient(circle, rgb(18 20 26 / 0.85) 0 60%, transparent 61%),
+    conic-gradient(var(--copper-bright) calc(var(--progress) * 360deg), #ffffff26 0);
+}
+
+.interact .icon {
+  font-size: 2rem;
+}
+
+.ready {
+  box-shadow:
+    0 0 0 3px var(--copper),
+    0 0 24px #f0a04b88;
+}
+
+.tray {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.gadget {
+  position: relative;
+  appearance: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid #ffffff33;
+  background: rgb(18 20 26 / 0.8);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 3px 10px #0007;
+}
+
+.gadget:active {
+  transform: scale(0.94);
+}
+
+.gadgetIcon {
+  font-size: 1.5rem;
+}
+
+.count {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.hotkey {
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--text-dim);
+}
+
+.stamina {
+  width: 168px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #0009;
+  border: 1px solid #ffffff22;
+}
+
+.stamina > div {
+  height: 100%;
+  background: var(--warn);
+  transition: width 0.1s linear;
+}
+
+.stamina[data-boost='true'] > div {
+  background: linear-gradient(90deg, #fff176, #4dd0e1);
+}
+
+/* Short landscape phones: tighten everything up. */
+@media (max-height: 420px) {
+  .stickZone {
+    top: 34%;
+  }
+
+  .interact {
+    width: 84px;
+    height: 84px;
+  }
+
+  .small {
+    width: 54px;
+    height: 54px;
+  }
+
+  .gadget {
+    width: 46px;
+    height: 46px;
+  }
+}

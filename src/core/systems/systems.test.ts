@@ -1,4 +1,4 @@
-import { BALANCE } from '../content/balance';
+import { BALANCE, TILE_SIZE } from '../content/balance';
 import { CHARACTERS } from '../content/characters';
 import { FIXTURES } from '../content/fixtures';
 import { createRng } from '../util/rng';
@@ -6,7 +6,7 @@ import { addToBag, bagFree, bagTotal, createBag, emptyBag } from './bag';
 import { saleValue } from './economy';
 import { bossSpeedMult, escalationLevel } from './escalation';
 import { effectiveRepair, rollYield, scrapDuration } from './scrapping';
-import { canPurchase } from './shop';
+import { canBuyConsumable, canPurchase, discounted } from './shop';
 import { activeUpgrades, deriveStats } from './stats';
 import { addWarning, heartsLeft, recoverHeart } from './warnings';
 
@@ -91,7 +91,27 @@ describe('stats + upgrades', () => {
   });
 
   it('ignores unknown upgrade ids from stale saves', () => {
-    expect(() => deriveStats(dalton, ['retired-item'])).not.toThrow();
+    expect(() => deriveStats(dalton, ['retired-item', 'retired-skill'])).not.toThrow();
+    expect(() => deriveStats(dalton, [], ['retired-skill'])).not.toThrow();
+  });
+
+  it('stacks gear and skills: multipliers multiply, bonuses add', () => {
+    const base = deriveStats(dalton, []);
+    const s = deriveStats(
+      dalton,
+      ['work-gloves', 'mechanics-gloves', 'scrapyard-card', 'walkie-talkie'],
+      ['soft-steps', 'smooth-hands', 'ghost', 'haggler', 'union-rep', 'overtime', 'low-rider'],
+    );
+    // Only the best gloves count, then Smooth Hands on top.
+    expect(s.scrapNoticeMult).toBeCloseTo(0.6 * 0.75);
+    expect(s.noticeMult).toBeCloseTo(0.9 * 0.85);
+    expect(s.decayMult).toBe(2);
+    expect(s.saleMult).toBeCloseTo(1.1 * 1.1);
+    expect(s.hearingRange).toBe(base.hearingRange + 3 * TILE_SIZE);
+    expect(s.maxWarnings).toBe(BALANCE.warnings.max + 1);
+    expect(s.shiftSeconds).toBe(BALANCE.shift.durationSeconds + 60);
+    expect(s.crouchSpeedFactor).toBeCloseTo(BALANCE.player.crouchSpeedMult * 1.4);
+    expect(base.carryNoticeMult).toBe(1);
   });
 });
 
@@ -99,12 +119,28 @@ describe('shop', () => {
   it('requires tiers in order, once, with enough cash', () => {
     expect(canPurchase('backpack', [], 999)).toEqual({ ok: false, reason: 'locked' });
     expect(canPurchase('cardboard-box', [], 10)).toEqual({ ok: false, reason: 'funds' });
-    expect(canPurchase('cardboard-box', [], 50)).toEqual({ ok: true });
+    expect(canPurchase('cardboard-box', [], 50)).toEqual({ ok: true, price: 50 });
     expect(canPurchase('cardboard-box', ['cardboard-box'], 999)).toEqual({
       ok: false,
       reason: 'owned',
     });
-    expect(canPurchase('backpack', ['cardboard-box'], 999)).toEqual({ ok: true });
+    expect(canPurchase('backpack', ['cardboard-box'], 999)).toMatchObject({ ok: true });
+  });
+
+  it('applies the coupon discount to the price and the cash check', () => {
+    expect(discounted(100, 0.15)).toBe(85);
+    expect(canPurchase('cardboard-box', [], 45, 0.15)).toEqual({ ok: true, price: 43 });
+    expect(canPurchase('cardboard-box', [], 40, 0.15)).toEqual({ ok: false, reason: 'funds' });
+  });
+
+  it('stacks gadgets up to their limit', () => {
+    expect(canBuyConsumable('energy-drink', {}, 100)).toEqual({ ok: true, price: 20 });
+    expect(canBuyConsumable('energy-drink', { 'energy-drink': 3 }, 100)).toEqual({
+      ok: false,
+      reason: 'full',
+    });
+    expect(canBuyConsumable('energy-drink', {}, 5)).toEqual({ ok: false, reason: 'funds' });
+    expect(canBuyConsumable('jetpack', {}, 999)).toEqual({ ok: false, reason: 'unknown' });
   });
 });
 
@@ -115,6 +151,12 @@ describe('warnings', () => {
     expect(recoverHeart(2)).toBe(1);
     expect(recoverHeart(0)).toBe(0);
     expect(heartsLeft(1)).toBe(2);
+  });
+
+  it('takes one more warning with an extra heart', () => {
+    expect(addWarning(2, 4)).toEqual({ warnings: 3, fired: false });
+    expect(addWarning(3, 4)).toEqual({ warnings: 4, fired: true });
+    expect(heartsLeft(1, 4)).toBe(3);
   });
 });
 

@@ -19,6 +19,13 @@ import { PALETTE } from './palette';
 
 export const WALL_HEIGHT = 1.6;
 const WALL_CUT_HEIGHT = 0.22;
+/** Half-width of the see-through strip around the player (tiles). */
+const CUT_HALF_WIDTH = 0.4;
+/**
+ * How far in front of the player a wall can still cover their feet: a wall's "shadow" toward the
+ * camera at the true isometric angle (tan 35.26° = 1/√2), plus a little slack.
+ */
+const CUT_REACH = WALL_HEIGHT * Math.SQRT2 + 0.3;
 
 /**
  * Instanced walls that duck down when they'd hide the player (classic iso "cutaway"), so the
@@ -62,18 +69,24 @@ export class WallCutaway {
   }
 
   /**
-   * Lower walls standing between the camera and the player. `toCamera` is the ground-plane
-   * direction toward the camera; `across` is screen-right on the ground.
+   * Lower only the walls that would hide the player: the ones in front of them (below them on
+   * screen) whose silhouette actually covers them. Walls beside or behind stay up.
+   *
+   * The camera is orthographic, so the hidden region is a straight strip running from the player
+   * toward the camera, about as wide as the player and as long as a wall's shadow on the floor.
+   * `toCamera` is the ground-plane direction toward the camera; `across` is screen-right.
    */
   update(px: number, pz: number, toCamera: THREE.Vector2, across: THREE.Vector2, dt: number) {
     const k = Math.min(1, dt * 10);
+    // A unit tile reaches this far either side of its center along a diagonal axis.
+    const halfTile = 0.5 * (Math.abs(across.x) + Math.abs(across.y));
     let changed = false;
     for (let i = 0; i < this.heights.length; i++) {
       const dx = this.cols[i]! + 0.5 - px;
       const dz = this.rows[i]! + 0.5 - pz;
       const depth = dx * toCamera.x + dz * toCamera.y;
       const lateral = Math.abs(dx * across.x + dz * across.y);
-      const cut = depth > 0.2 && depth < 4.2 && lateral < 2.6 + depth * 0.25;
+      const cut = depth > 0 && depth - halfTile < CUT_REACH && lateral < halfTile + CUT_HALF_WIDTH;
       const target = cut ? WALL_CUT_HEIGHT : WALL_HEIGHT;
       const h = this.heights[i]!;
       if (Math.abs(h - target) < 0.001) continue;

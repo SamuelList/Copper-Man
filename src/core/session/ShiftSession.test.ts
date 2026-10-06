@@ -77,6 +77,18 @@ describe('ShiftSession', () => {
     expect(s.isSuspicious).toBe(false);
   });
 
+  it('turns to face the object being worked on', () => {
+    const s = session();
+    standAtFountain(s);
+    s.player.facing = Math.PI / 2; // facing south, away from the fountain
+    hold(s, 0.2, input({ interact: true }));
+    expect(s.interaction?.target.kind).toBe('fixture');
+    const f = s.fixtures[0]!;
+    expect(s.player.facing).toBeCloseTo(
+      Math.atan2(f.pos.y - s.player.pos.y, f.pos.x - s.player.pos.x),
+    );
+  });
+
   it('cancels scrapping when the player moves', () => {
     const s = session();
     standAtFountain(s);
@@ -187,6 +199,148 @@ describe('ShiftSession', () => {
     }
     expect(s.getSummary()?.endedBy).toBe('time');
     expect(s.boss.pos.x).toBeGreaterThan(0);
+  });
+});
+
+describe('ShiftSession progression + gadgets', () => {
+  it('earns XP for scrapping and selling, plus end-of-shift bonuses', () => {
+    const s = session({ durationSeconds: 30 });
+    const gained = record(s, 'xp:gained');
+    standAtFountain(s);
+    hold(s, 6, input({ interact: true }));
+    placePlayer(s, 2, 2);
+    hold(s, 0.1, input());
+    hold(s, 2, input({ interact: true }));
+    expect(gained.map((g) => g.reason)).toEqual(['Scrapping', 'Sales']);
+    s.clockOut();
+    const summary = s.getSummary()!;
+    expect(summary.xp.map((l) => l.label)).toEqual([
+      'Scrapping',
+      'Sales',
+      'Finished the shift',
+      'Never caught',
+    ]);
+    expect(summary.xpTotal).toBe(
+      BALANCE.xp.perScrap +
+        Math.round(25 * BALANCE.xp.perDollar) +
+        BALANCE.xp.shiftComplete +
+        BALANCE.xp.cleanShift,
+    );
+  });
+
+  it('gets no completion bonus for being fired', () => {
+    const s = session({ warnings: 2 });
+    s.bag = { ...s.bag, contents: { ...s.bag.contents, brass: 0.5 } };
+    s.boss.mode = 'chase';
+    s.boss.pos = { ...s.player.pos };
+    s.tick(1 / 60, input());
+    expect(s.getSummary()?.xpTotal).toBe(0);
+  });
+
+  it('sells for more with a scrapyard card', () => {
+    const s = session({ ownedUpgrades: ['scrapyard-card'] });
+    const sold = record(s, 'scrap:sold');
+    s.bag = { ...s.bag, contents: { ...s.bag.contents, brass: 1 } };
+    placePlayer(s, 2, 2);
+    hold(s, 0.1, input());
+    hold(s, 2, input({ interact: true }));
+    expect(sold[0]!.value).toBe(Math.round(25 * 1.1));
+  });
+
+  it('an energy drink refills stamina and makes sprinting free for a while', () => {
+    const s = session({ inventory: { 'energy-drink': 2 } });
+    const used = record(s, 'gadget:used');
+    s.player.stamina = 0;
+    s.tick(1 / 60, input({ use: 'energy-drink' }));
+    expect(used).toHaveLength(1);
+    expect(s.inventory['energy-drink']).toBe(1);
+    expect(s.player.stamina).toBe(s.stats.staminaSeconds);
+    hold(s, 3, input({ moveY: 1, sprint: true }));
+    expect(s.player.stamina).toBe(s.stats.staminaSeconds);
+    expect(s.getSnapshot().boost).toBeGreaterThan(0);
+  });
+
+  it("can't use a gadget you don't have", () => {
+    const s = session();
+    const used = record(s, 'gadget:used');
+    s.tick(1 / 60, input({ use: 'energy-drink' }));
+    expect(used).toHaveLength(0);
+  });
+
+  it('a whoopee cushion lures the boss to where it lands', () => {
+    const s = session({ inventory: { 'whoopee-cushion': 1 } });
+    const noise = record(s, 'noise:made');
+    placePlayer(s, 10, 3);
+    s.player.facing = 0; // east, toward the boss's side of the map
+    s.tick(1 / 60, input({ use: 'whoopee-cushion' }));
+    expect(noise).toHaveLength(1);
+    // Lands short of the east wall, inside the map.
+    expect(noise[0]!.pos.x).toBeGreaterThan(s.player.pos.x + TILE_SIZE * 2);
+    expect(noise[0]!.pos.x).toBeLessThan(17 * TILE_SIZE);
+    expect(s.boss.mode).toBe('investigate');
+    expect(s.boss.lastKnown).toEqual(noise[0]!.pos);
+  });
+
+  it('bolt cutters open a locked door instantly, but only at a door', () => {
+    const s = session({ inventory: { 'bolt-cutters': 1 } });
+    const failed = record(s, 'gadget:failed');
+    const unlocked = record(s, 'door:unlocked');
+    s.tick(1 / 60, input({ use: 'bolt-cutters' }));
+    expect(failed).toHaveLength(1);
+    expect(s.inventory['bolt-cutters']).toBe(1);
+    placePlayer(s, 8, 1);
+    hold(s, 0.1, input());
+    s.tick(1 / 60, input({ use: 'bolt-cutters' }));
+    expect(unlocked).toEqual([{ doorId: 'door-9-1', by: 'player' }]);
+    expect(s.inventory['bolt-cutters']).toBe(0);
+    expect(s.getSummary()).toBeNull();
+  });
+
+  it('Smooth Talker talks out of the first catch each shift', () => {
+    const s = session({ warnings: 2, skills: ['smooth-talker'] });
+    const talked = record(s, 'player:talkedOut');
+    const caught = record(s, 'player:caught');
+    const catchNow = () => {
+      s.bag = { ...s.bag, contents: { ...s.bag.contents, copper: 1 } };
+      s.player.grace = 0;
+      s.boss.mode = 'chase';
+      s.boss.pos = { ...s.player.pos };
+      s.tick(1 / 60, input());
+    };
+    catchNow();
+    expect(talked).toEqual([{ confiscated: 1 }]);
+    expect(s.warnings).toBe(2);
+    expect(s.getSnapshot().bag.contents.copper).toBe(0);
+    expect(s.status).toBe('running');
+    catchNow();
+    expect(caught).toHaveLength(1);
+    expect(s.status).toBe('ended');
+  });
+
+  it('Union Rep adds a heart', () => {
+    const s = session({ warnings: 2, skills: ['union-rep'] });
+    s.bag = { ...s.bag, contents: { ...s.bag.contents, brass: 0.5 } };
+    s.boss.mode = 'chase';
+    s.boss.pos = { ...s.player.pos };
+    s.tick(1 / 60, input());
+    expect(s.status).toBe('running');
+    expect(s.getSnapshot()).toMatchObject({ warnings: 3, maxWarnings: 4 });
+  });
+
+  it('Overtime lengthens the shift and leftover gadgets carry over', () => {
+    const s = new ShiftSession({
+      level: testLevel(MAP),
+      characterId: 'dalton',
+      ownedUpgrades: [],
+      skills: ['overtime'],
+      inventory: { 'energy-drink': 1 },
+      day: 1,
+      warnings: 0,
+      seed: 1,
+    });
+    expect(s.duration).toBe(BALANCE.shift.durationSeconds + 60);
+    s.clockOut();
+    expect(s.getSummary()?.inventory).toEqual({ 'energy-drink': 1 });
   });
 });
 

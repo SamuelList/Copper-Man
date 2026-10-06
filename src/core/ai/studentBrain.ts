@@ -30,6 +30,8 @@ export interface StudentContext {
   sees: boolean;
   /** Detection meter gain per second while `sees`. */
   rate: number;
+  /** Detection meter drain per second when not seeing (default: balance). */
+  decay?: number;
   playerPos: Vec2;
   rng: Rng;
   tuning: StudentTuning;
@@ -80,7 +82,7 @@ export function updateStudent(student: StudentState, ctx: StudentContext): boole
     student.detection,
     canNotice,
     ctx.rate,
-    NPC.vision.decayRate,
+    ctx.decay ?? NPC.vision.decayRate,
     dt,
   );
 

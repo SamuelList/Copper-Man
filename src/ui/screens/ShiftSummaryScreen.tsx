@@ -1,8 +1,8 @@
-import { BALANCE } from '@core/content/balance';
 import { METAL_IDS, METALS } from '@core/content/metals';
+import { xpToNext } from '@core/systems/progression';
 import { useAppStore } from '@state/appStore';
-import { useCareerStore } from '@state/careerStore';
-import { Button, Panel } from '../components';
+import { careerStats, useCareerStore } from '@state/careerStore';
+import { Button, Hearts, LevelBadge, Panel } from '../components';
 import { money, units } from '../format';
 import styles from './screens.module.css';
 
@@ -14,9 +14,10 @@ const END_LABEL = {
 
 export function ShiftSummaryScreen() {
   const go = useAppStore((s) => s.go);
-  const { lastSummary: s, cash, warnings } = useCareerStore();
+  const career = useCareerStore();
+  const { lastSummary: s, cash, warnings, level, xp, skillPoints, lastLevelsGained } = career;
   if (!s) return null;
-  const hearts = BALANCE.warnings.max - warnings;
+  const maxHearts = careerStats(career).maxWarnings;
 
   return (
     <main className={[styles.screen, styles.center].join(' ')}>
@@ -44,14 +45,42 @@ export function ShiftSummaryScreen() {
           <dt>Coworker found</dt>
           <dd>{s.coworkerFound ? 'Yes' : 'No'}</dd>
           <dt>Hearts left</dt>
-          <dd style={{ color: 'var(--bad)' }}>{'♥'.repeat(hearts) || '—'}</dd>
+          <dd>
+            <Hearts warnings={warnings} max={maxHearts} />
+          </dd>
           <dt>Cash on hand</dt>
           <dd style={{ color: 'var(--good)' }}>{money(cash)}</dd>
         </dl>
       </Panel>
+      <Panel className={styles.xpPanel}>
+        <h2>Experience</h2>
+        {lastLevelsGained > 0 && (
+          <div className={styles.levelUp} role="status">
+            Level up! Level {level}
+            <small>
+              {skillPoints} skill {skillPoints === 1 ? 'point' : 'points'} to spend at the store
+            </small>
+          </div>
+        )}
+        <dl className={styles.statsGrid}>
+          {s.xp.map((line) => (
+            <div key={line.label} style={{ display: 'contents' }}>
+              <dt>{line.label}</dt>
+              <dd>+{line.amount}</dd>
+            </div>
+          ))}
+          <dt>Total</dt>
+          <dd style={{ color: 'var(--xp)' }} data-testid="xp-total">
+            +{s.xpTotal} XP
+          </dd>
+        </dl>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.9rem' }}>
+          <LevelBadge level={level} xp={xp} next={xpToNext(level)} />
+        </div>
+      </Panel>
       <div className={styles.actions}>
         <Button variant="primary" onClick={() => go('shop')}>
-          Hit the hardware store
+          {skillPoints > 0 ? 'Spend skill points & shop' : 'Hit the hardware store'}
         </Button>
       </div>
     </main>
