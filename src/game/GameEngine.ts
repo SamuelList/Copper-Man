@@ -362,7 +362,6 @@ export class GameEngine {
           pos: p.pos,
           facing: p.facing,
           running: p.sprinting,
-          crouching: p.crouching,
           working: !!s.interaction,
         },
         dt,

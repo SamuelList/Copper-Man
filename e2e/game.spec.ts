@@ -5,7 +5,12 @@ interface DebugWindow {
   __copper?: {
     session: {
       elapsed: number;
-      player: { pos: { x: number; y: number }; abilityActive: number; crouching: boolean };
+      player: {
+        pos: { x: number; y: number };
+        abilityActive: number;
+        sprinting: boolean;
+        stamina: number;
+      };
       boss: { pos: { x: number; y: number }; mode: string };
       bag: { capacity: number; contents: Record<string, number> };
       vanBoxes: { minX: number; maxX: number; minY: number; maxY: number }[];
@@ -21,7 +26,7 @@ async function waitForSession(page: Page) {
   });
 }
 
-test('a full day: hire, sneak, crouch, sell, clock out, shop, next day', async ({
+test('a full day: hire, sneak, sprint, sell, clock out, shop, next day', async ({
   page,
 }, testInfo) => {
   const errors: string[] = [];
@@ -58,16 +63,18 @@ test('a full day: hire, sneak, crouch, sell, clock out, shop, next day', async (
     .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.player.abilityActive))
     .toBeGreaterThan(0);
 
-  // C toggles crouching; the HUD light meter reflects it.
-  await page.keyboard.press('c');
+  // Shift sprints (and burns stamina); the light meter shows how lit you are.
+  await page.keyboard.down('Shift');
+  await page.keyboard.down('a');
   await expect
-    .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.player.crouching))
+    .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.player.sprinting))
     .toBe(true);
-  await expect(page.getByTestId('visibility')).toContainText('Crouching');
-  await page.keyboard.press('c');
-  await expect
-    .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.player.crouching))
-    .toBe(false);
+  await page.keyboard.up('a');
+  await page.keyboard.up('Shift');
+  expect(
+    await page.evaluate(() => (window as DebugWindow).__copper!.session.player.stamina),
+  ).toBeLessThan(2.5);
+  await expect(page.getByTestId('visibility')).toContainText(/Bright|Dim|Dark/);
 
   // Pause and resume with Esc / the overlay.
   await page.keyboard.press('Escape');

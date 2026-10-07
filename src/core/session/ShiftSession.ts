@@ -65,7 +65,6 @@ import {
   castRay,
   hasLineOfSight,
   inCone,
-  lineOfSight,
   visibilityOutline,
   type ViewCone,
 } from '../systems/vision';
@@ -219,7 +218,6 @@ export class ShiftSession {
       facing: 0,
       moving: false,
       sprinting: false,
-      crouching: false,
       stamina: this.stats.staminaSeconds,
       staminaDelay: 0,
       grace: 0,
@@ -441,8 +439,7 @@ export class ShiftSession {
       my /= len;
     }
 
-    p.crouching = input.crouch;
-    p.sprinting = p.moving && input.sprint && !p.crouching && p.stamina > 0;
+    p.sprinting = p.moving && input.sprint && p.stamina > 0;
     if (p.sprinting) {
       // Energy drinks make sprinting free while they last.
       if (p.boost <= 0) p.stamina = Math.max(0, p.stamina - dt);
@@ -461,11 +458,7 @@ export class ShiftSession {
       p.vel = { x: 0, y: 0 };
       return;
     }
-    const speed = p.crouching
-      ? this.stats.walkSpeed * this.stats.crouchSpeedFactor
-      : p.sprinting
-        ? this.stats.sprintSpeed
-        : this.stats.walkSpeed;
+    const speed = p.sprinting ? this.stats.sprintSpeed : this.stats.walkSpeed;
     const before = p.pos;
     const moved = steerMove(
       this.grid,
@@ -705,8 +698,8 @@ export class ShiftSession {
 
   /**
    * How quickly this observer is filling its detection meter on the player right now
-   * (0 when the player isn't in view). Accounts for range, cone, walls, crouching behind low
-   * cover, the near/far zones, and how dark it is where the player stands.
+   * (0 when the player isn't in view). Accounts for range, cone, walls and tall furniture, the
+   * near/far zones, and how dark it is where the player stands.
    */
   private perceive(
     cone: ViewCone,
@@ -723,7 +716,7 @@ export class ShiftSession {
     const sees =
       distance <= range &&
       inCone({ ...cone, range }, target) &&
-      lineOfSight(this.grid, cone.pos, target, this.player.crouching);
+      hasLineOfSight(this.grid, cone.pos, target);
     if (!sees) return { sees, rate: 0 };
     // Gear and skills that make what you're doing less noticeable; the most visible signal wins.
     const signalMult = Math.max(
@@ -956,13 +949,16 @@ export class ShiftSession {
 
     this.squeakCooldown = Math.max(0, this.squeakCooldown - dt);
     const p = this.player;
-    if (!p.moving || p.crouching || this.squeakCooldown > 0) return;
+    if (!p.moving || this.squeakCooldown > 0) return;
     const t = worldToTile(TILE_SIZE, p.pos.x, p.pos.y);
     if (!this.wet.has(t.row * this.level.cols + t.col)) return;
     this.squeakCooldown = CUST.squeakCooldownSeconds;
     this.events.emit('player:squeak', { pos: { ...p.pos } });
     const through = hasLineOfSight(this.grid, this.boss.pos, p.pos) ? 1 : 0.5;
-    if (dist(this.boss.pos, p.pos) <= CUST.squeakTiles * TILE_SIZE * through) {
+    if (
+      dist(this.boss.pos, p.pos) <=
+      CUST.squeakTiles * TILE_SIZE * through * this.stats.noiseMult
+    ) {
       this.pendingNoise = { ...p.pos };
     }
   }
@@ -978,7 +974,8 @@ export class ShiftSession {
     const p = this.player;
     if (!p.sprinting || this.hearCooldown > 0) return null;
     const through = hasLineOfSight(this.grid, this.boss.pos, p.pos) ? 1 : 0.5;
-    const range = B.hearSprintTiles * TILE_SIZE * through * this.stats.noticeMult;
+    const range =
+      B.hearSprintTiles * TILE_SIZE * through * this.stats.noticeMult * this.stats.noiseMult;
     if (dist(this.boss.pos, p.pos) > range) return null;
     this.hearCooldown = B.hearCooldownSeconds;
     return { kind: 'noise', pos: { ...p.pos } };
@@ -1205,7 +1202,6 @@ export class ShiftSession {
       escalation: this.escalation,
       suspicious: this.isSuspicious,
       grace: p.grace,
-      crouching: p.crouching,
       light: this.playerLight,
       xp: this.xpEarned,
       inventory: { ...this.inventory },

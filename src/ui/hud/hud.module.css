@@ -356,6 +356,9 @@
 .pause {
   pointer-events: auto;
   appearance: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
   width: 44px;
   height: 44px;
   border-radius: 10px;
@@ -363,124 +366,121 @@
   background: rgb(14 16 20 / 0.78);
   color: var(--text);
   font-size: 0.9rem;
-  letter-spacing: -0.1em;
   cursor: pointer;
   touch-action: manipulation;
 }
 
-/* ---- Touch layout: everything shrinks and tucks into the corners, out of the thumbs' way ---- */
+.pauseIcon {
+  width: 11px;
+  height: 12px;
+  border-left: 4px solid currentColor;
+  border-right: 4px solid currentColor;
+  box-sizing: border-box;
+}
 
-.hud[data-touch='true'] {
+/* ---- Touch layout: the top bar (TouchBar) and thumb controls; these tuck the rest away ---- */
+
+.hud[data-touch] {
   font-size: 0.8rem;
   -webkit-user-select: none;
   user-select: none;
 }
 
-.hud[data-touch='true'] .card {
-  padding: 0.4rem 0.6rem;
+.hud[data-touch] .card {
+  padding: 0.35rem 0.75rem;
+  border-radius: 14px;
+  background: rgb(10 12 16 / 0.55);
+  border-color: rgb(255 255 255 / 0.09);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  text-shadow: none;
 }
 
-.hud[data-touch='true'] .topLeft {
-  top: max(8px, env(safe-area-inset-top));
-  left: max(8px, env(safe-area-inset-left));
-  gap: 0.35rem;
+/* Toasts drop in under the top bar as small pills. */
+.hud[data-touch] .toasts {
+  top: calc(max(6px, env(safe-area-inset-top)) + 38px);
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: min(360px, 80vw);
 }
 
-.hud[data-touch='true'] .topRight {
-  top: max(8px, env(safe-area-inset-top));
-  right: max(8px, env(safe-area-inset-right));
-}
-
-.hud[data-touch='true'] .topCenter {
-  top: max(8px, env(safe-area-inset-top));
-}
-
-.hud[data-touch='true'] .timer {
-  font-size: 1.35rem;
-}
-
-.hud[data-touch='true'] .cash {
-  font-size: 1.1rem;
-}
-
-.hud[data-touch='true'] .hearts {
-  font-size: 1.15rem;
-}
-
-.hud[data-touch='true'] .bag {
-  width: 170px;
-}
-
-.hud[data-touch='true'] .bagText {
-  font-size: 0.68rem;
-}
-
-.hud[data-touch='true'] .visibility {
-  width: auto;
+.hud[data-touch] .toast {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+  border-left: 0;
+  border-radius: 14px;
+  background: rgb(10 12 16 / 0.6);
+  border: 1px solid rgb(255 255 255 / 0.09);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
   font-size: 0.72rem;
-  padding: 0.3rem 0.5rem;
+  font-weight: 600;
+  text-shadow: none;
+  animation: dropIn 0.2s ease-out;
 }
 
-.hud[data-touch='true'] .lightGem {
-  width: 18px;
-  height: 18px;
+.hud[data-touch] .toast::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--info);
 }
 
-.hud[data-touch='true'] .detection {
+.hud[data-touch] .toast[data-tone='good']::before {
+  background: var(--good);
+}
+
+.hud[data-touch] .toast[data-tone='warn']::before {
+  background: var(--warn);
+}
+
+.hud[data-touch] .toast[data-tone='bad']::before {
+  background: var(--bad);
+}
+
+/* The prompt floats between the thumbs. */
+.hud[data-touch] .bottomCenter {
+  bottom: max(14px, env(safe-area-inset-bottom));
+}
+
+.hud[data-touch] .prompt {
   min-width: 0;
-  padding: 0.35rem 0.6rem;
-  font-size: 0.75rem;
+  max-width: min(40vw, 340px);
+  font-size: 0.74rem;
+  font-weight: 600;
 }
 
-.hud[data-touch='true'] .detectBar {
-  width: 56px;
+.hud[data-touch] .progress {
+  height: 3px;
+  margin-top: 4px;
 }
 
-.hud[data-touch='true'] .badge {
-  display: none;
-}
-
-.hud[data-touch='true'] .toasts {
-  top: auto;
-  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 150px);
-  right: max(10px, env(safe-area-inset-right));
-  max-width: min(300px, 46vw);
-}
-
-.hud[data-touch='true'] .toast {
-  font-size: 0.75rem;
-  padding: 0.35rem 0.55rem;
-}
-
-/* The prompt floats over the middle, above both thumbs. */
-.hud[data-touch='true'] .bottomCenter {
-  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 96px);
-}
-
-.hud[data-touch='true'] .prompt {
-  min-width: 0;
-  max-width: 44vw;
-  font-size: 0.78rem;
-}
-
-/* Portrait phones: the detection pill drops below the top row. */
+/* Portrait: the thumbs take the bottom, so the prompt sits above them. */
 @media (max-width: 560px) {
-  .hud[data-touch='true'] .topCenter {
-    top: calc(max(8px, env(safe-area-inset-top)) + 192px);
+  .hud[data-touch] .toasts {
+    top: calc(max(6px, env(safe-area-inset-top)) + 74px);
   }
 
-  .hud[data-touch='true'] .prompt {
-    max-width: 70vw;
+  .hud[data-touch] .bottomCenter {
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 140px);
   }
 
-  .hud[data-touch='true'] .bottomCenter {
-    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 210px);
+  .hud[data-touch] .prompt {
+    max-width: 78vw;
   }
 }
 
-/* Short landscape phones. */
-@media (max-height: 420px) {
-  .hud[data-touch='true'] .visibility {
-    display: none;
+@keyframes dropIn {
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
   }
 }

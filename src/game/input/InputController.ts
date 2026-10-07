@@ -20,7 +20,6 @@ const GAME_KEYS = new Set([
   'KeyD',
   'KeyE',
   'KeyQ',
-  'KeyC',
   'ShiftLeft',
   'ShiftRight',
   'Digit1',
@@ -31,15 +30,14 @@ const GAME_KEYS = new Set([
 /** Gadget hotkeys: Digit1 → the consumable whose hotkey is '1', and so on. */
 const GADGET_KEYS = new Map(CONSUMABLES.all.map((c) => [`Digit${c.hotkey}`, c.id]));
 
-/** Joystick dead zone, the deflection that reaches full walking speed, and the sprint rim. */
+/** Joystick dead zone and the deflection that reaches full walking speed. */
 const STICK_DEAD = 0.12;
 const STICK_FULL = 0.55;
-const STICK_SPRINT = 0.92;
 
 /**
  * Turns the keyboard and the on-screen touch controls into world-space `PlayerInput`. Movement is
  * screen-relative (rotated into the fixed camera's frame). Held actions are polled; one-shot
- * actions (ability, crouch toggle, gadgets, pause) are queued on keydown or tap so a quick press
+ * actions (ability, gadgets, pause) are queued on keydown or tap so a quick press
  * is never lost between frames.
  */
 export class InputController {
@@ -47,7 +45,6 @@ export class InputController {
   private abilityQueued = false;
   private pauseQueued = false;
   private useQueued: string | null = null;
-  private crouching = false;
 
   constructor(private readonly target: Window = window) {
     target.addEventListener('keydown', this.onKeyDown);
@@ -68,7 +65,6 @@ export class InputController {
     if (e.repeat) return;
     this.held.add(e.code);
     if (e.code === 'KeyQ') this.abilityQueued = true;
-    if (e.code === 'KeyC') this.crouching = !this.crouching;
     const gadget = GADGET_KEYS.get(e.code);
     if (gadget) this.useQueued = gadget;
   };
@@ -89,20 +85,17 @@ export class InputController {
   read(basis: ScreenBasis): PlayerInput {
     for (const action of virtualInput.drain()) {
       if (action.type === 'ability') this.abilityQueued = true;
-      else if (action.type === 'crouch') this.crouching = !this.crouching;
       else this.useQueued = action.id;
     }
     let sx = Number(this.down('KeyD', 'ArrowRight')) - Number(this.down('KeyA', 'ArrowLeft'));
     let sy = Number(this.down('KeyW', 'ArrowUp')) - Number(this.down('KeyS', 'ArrowDown'));
-    let stickSprint = false;
     if (sx === 0 && sy === 0) {
-      // Analog stick: creep at a light touch, full walk from about half way, sprint at the rim.
+      // Analog stick: ease off for a slow walk; full speed from about half way out.
       const mag = Math.hypot(virtualInput.stickX, virtualInput.stickY);
       if (mag > STICK_DEAD) {
         const speed = Math.min(1, (mag - STICK_DEAD) / (STICK_FULL - STICK_DEAD));
         sx = (virtualInput.stickX / mag) * speed;
         sy = (virtualInput.stickY / mag) * speed;
-        stickSprint = mag >= STICK_SPRINT;
       }
     }
     const moveX = sx * basis.screenRight.x + sy * basis.screenUp.x;
@@ -114,10 +107,9 @@ export class InputController {
     return {
       moveX,
       moveY,
-      sprint: this.down('ShiftLeft', 'ShiftRight') || stickSprint || virtualInput.sprint,
+      sprint: this.down('ShiftLeft', 'ShiftRight') || virtualInput.sprint,
       interact: this.down('KeyE', 'Space') || virtualInput.interact,
       ability,
-      crouch: this.crouching,
       use,
     };
   }

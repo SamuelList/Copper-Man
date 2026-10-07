@@ -7,72 +7,78 @@
   -webkit-touch-callout: none;
 }
 
-/* Left side of the screen, below the top HUD row: touch anywhere here to grab the stick. */
+/* Left half of the screen below the top bar: touch anywhere here to grab the stick. */
 .stickZone {
   position: absolute;
   left: 0;
   bottom: 0;
   width: 50%;
-  top: 28%;
+  top: 22%;
   pointer-events: auto;
   touch-action: none;
 }
 
 .stickBase {
   position: absolute;
-  left: calc(max(16px, env(safe-area-inset-left)) + 72px);
-  top: calc(100% - max(16px, env(safe-area-inset-bottom)) - 76px);
-  width: 124px;
-  height: 124px;
-  margin: -62px 0 0 -62px;
+  left: calc(max(16px, env(safe-area-inset-left)) + 56px);
+  top: calc(100% - max(14px, env(safe-area-inset-bottom)) - 58px);
+  width: 104px;
+  height: 104px;
+  margin: -52px 0 0 -52px;
   border-radius: 50%;
-  border: 2px solid #ffffff33;
-  background: radial-gradient(circle, #ffffff10 0 55%, #ffffff1c 56% 100%);
-  opacity: 0.45;
-  transition:
-    opacity 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  border: 1.5px solid rgb(255 255 255 / 0.22);
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 0.03) 0 50%,
+    rgb(255 255 255 / 0.09) 51% 100%
+  );
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
 }
 
 .stickBase[data-active='true'] {
   opacity: 0.95;
 }
 
-.stickBase[data-sprint='true'] {
-  border-color: var(--warn);
-  box-shadow: 0 0 22px #ffb74d88;
-}
-
 .stickKnob {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 58px;
-  height: 58px;
-  margin: -29px 0 0 -29px;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
   border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #fff, #c9ced6 60%, #8d949e);
-  box-shadow: 0 4px 12px #0008;
+  background: radial-gradient(
+    circle at 40% 35%,
+    rgb(255 255 255 / 0.95),
+    rgb(205 210 218 / 0.85) 60%,
+    rgb(140 148 158 / 0.85)
+  );
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.45);
 }
+
+/* ---- Thumb buttons, bottom right ---- */
 
 .actions {
   position: absolute;
-  right: max(14px, env(safe-area-inset-right));
-  bottom: max(14px, env(safe-area-inset-bottom));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .cluster {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
 .btn {
+  position: relative;
   pointer-events: auto;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
@@ -80,68 +86,123 @@
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 1px;
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   padding: 0;
+  border: 0;
   border-radius: 50%;
-  border: 2px solid #ffffff38;
-  background: rgb(18 20 26 / 0.72);
+  background: rgb(10 12 16 / 0.5);
   color: var(--text);
+  font: inherit;
   font-weight: 800;
-  box-shadow: 0 4px 14px #0007;
-  backdrop-filter: blur(4px);
+  box-shadow:
+    0 4px 14px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.15s ease;
 }
 
-.btn:active {
-  transform: scale(0.94);
+.btn:active,
+.btn[data-held='true'] {
+  transform: scale(0.93);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .icon {
-  font-size: 1.45rem;
+  font-size: 1.3rem;
   line-height: 1;
 }
 
 .caption {
-  font-size: 0.62rem;
-  letter-spacing: 0.04em;
+  margin-top: 2px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* A thin progress ring around the button's edge: work done, stamina left, ability charge. */
+.ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--ring, var(--copper-bright)) calc(var(--fill, 0) * 360deg),
+    rgb(255 255 255 / 0.14) 0
+  );
+  -webkit-mask: radial-gradient(
+    closest-side,
+    transparent calc(100% - 3.5px),
+    #000 calc(100% - 3px)
+  );
+  mask: radial-gradient(closest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  pointer-events: none;
 }
 
 .small {
-  width: 60px;
-  height: 60px;
+  width: 50px;
+  height: 50px;
   margin-bottom: 4px;
+  --ring: var(--info);
+}
+
+.small .icon {
+  font-size: 1.15rem;
 }
 
 .on {
-  border-color: var(--info);
-  background: rgb(30 70 110 / 0.8);
+  --ring: var(--good);
+  box-shadow:
+    0 0 0 2px var(--good),
+    0 0 18px rgb(102 187 106 / 0.5);
 }
 
-/* The big one, with a ring that fills while you work. */
+.sprint {
+  --ring: var(--warn);
+  margin-bottom: 2px;
+}
+
+.sprint[data-held='true'] {
+  box-shadow:
+    0 0 0 2px var(--warn),
+    0 0 18px rgb(255 183 77 / 0.5);
+}
+
+.sprint[data-empty='true'] .icon {
+  opacity: 0.45;
+}
+
+/* Energy drink: free sprinting, so the ring shimmers instead of draining. */
+.sprint[data-boost='true']::before {
+  background: conic-gradient(#fff176, #4dd0e1, #fff176);
+  animation: spin 1.6s linear infinite;
+}
+
+/* The big one: what you're about to do, with a ring that fills while you work. */
 .interact {
-  width: 92px;
-  height: 92px;
-  border-width: 0;
-  background:
-    radial-gradient(circle, rgb(18 20 26 / 0.85) 0 60%, transparent 61%),
-    conic-gradient(var(--copper-bright) calc(var(--progress) * 360deg), #ffffff26 0);
+  width: 76px;
+  height: 76px;
+  background: rgb(10 12 16 / 0.6);
 }
 
 .interact .icon {
-  font-size: 2rem;
+  font-size: 1.75rem;
 }
 
 .ready {
   box-shadow:
-    0 0 0 3px var(--copper),
-    0 0 24px #f0a04b88;
+    0 0 0 2px var(--copper),
+    0 0 22px rgb(240 160 75 / 0.45);
 }
+
+/* ---- Gadgets (also used on desktop, bottom right) ---- */
 
 .tray {
   display: flex;
@@ -189,43 +250,33 @@
   color: var(--text-dim);
 }
 
-.stamina {
-  width: 168px;
-  height: 6px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: #0009;
-  border: 1px solid #ffffff22;
+.touch .tray {
+  gap: 6px;
 }
 
-.stamina > div {
-  height: 100%;
-  background: var(--warn);
-  transition: width 0.1s linear;
+.touch .gadget {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border-color: rgb(255 255 255 / 0.12);
+  background: rgb(10 12 16 / 0.5);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.3);
 }
 
-.stamina[data-boost='true'] > div {
-  background: linear-gradient(90deg, #fff176, #4dd0e1);
+.touch .gadgetIcon {
+  font-size: 1.2rem;
 }
 
-/* Short landscape phones: tighten everything up. */
-@media (max-height: 420px) {
-  .stickZone {
-    top: 34%;
-  }
+.touch .count {
+  right: 3px;
+  bottom: 1px;
+  font-size: 0.6rem;
+}
 
-  .interact {
-    width: 84px;
-    height: 84px;
-  }
-
-  .small {
-    width: 54px;
-    height: 54px;
-  }
-
-  .gadget {
-    width: 46px;
-    height: 46px;
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
   }
 }

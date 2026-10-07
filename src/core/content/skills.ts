@@ -55,14 +55,14 @@ export const SKILLS = createRegistry<SkillDef>('skill', [
     effect: { darkBonus: 0.45 },
   },
   {
-    id: 'low-rider',
+    id: 'rubber-soles',
     tree: 'shadow',
     tier: 2,
-    name: 'Low Rider',
-    description: 'Crouch-walk 40% faster.',
+    name: 'Rubber Soles',
+    description: 'Sprinting and squeaky wet floors carry half as far.',
     cost: 1,
     requires: ['soft-steps'],
-    effect: { crouchSpeedMult: 1.4 },
+    effect: { noiseMult: 0.5 },
   },
   {
     id: 'smooth-hands',
@@ -71,7 +71,7 @@ export const SKILLS = createRegistry<SkillDef>('skill', [
     name: 'Smooth Hands',
     description: 'Scrapping is 25% harder to notice.',
     cost: 1,
-    requires: ['night-owl', 'low-rider'],
+    requires: ['night-owl', 'rubber-soles'],
     effect: { scrapNoticeMult: 0.75 },
   },
   {

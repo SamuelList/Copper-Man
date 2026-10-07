@@ -93,7 +93,7 @@ describe('career store', () => {
     expect(store.getState().learnSkill('night-owl')).toEqual({ ok: false, reason: 'locked' });
     expect(store.getState().learnSkill('soft-steps')).toEqual({ ok: true, cost: 1 });
     expect(store.getState().learnSkill('night-owl')).toEqual({ ok: true, cost: 1 });
-    expect(store.getState().learnSkill('low-rider')).toEqual({ ok: false, reason: 'points' });
+    expect(store.getState().learnSkill('rubber-soles')).toEqual({ ok: false, reason: 'points' });
     expect(store.getState()).toMatchObject({ skills: ['soft-steps', 'night-owl'], skillPoints: 0 });
   });
 
@@ -134,6 +134,14 @@ describe('career store', () => {
       level: 4,
       skills: ['haggler'],
       explored: {},
+    });
+  });
+
+  it('migrates a v3 save: Low Rider (crouching is gone) becomes Rubber Soles', () => {
+    const v3 = { active: true, level: 5, skills: ['soft-steps', 'low-rider', 'smooth-hands'] };
+    expect(migrateCareer(v3, 3)).toMatchObject({
+      level: 5,
+      skills: ['soft-steps', 'rubber-soles', 'smooth-hands'],
     });
   });
 

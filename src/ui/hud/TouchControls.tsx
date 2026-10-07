@@ -1,14 +1,22 @@
 import { CONSUMABLES } from '@core/content/consumables';
 import { useShiftStore } from '@state/shiftStore';
 import { virtualInput } from '@state/virtualInput';
-import { useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useRef,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import styles from './touch.module.css';
 
 /** Stick travel in CSS px. */
-const STICK_RADIUS = 56;
-/** Matches the sprint rim in the input controller. */
-const SPRINT_AT = 0.92;
+const STICK_RADIUS = 44;
+
+const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(' ');
+
+/** Round a 0..1 fill to the steps a ring can show, so it re-renders sparingly. */
+const step = (fill: number) => Math.round(Math.min(1, Math.max(0, fill)) * 40) / 40;
 
 const VERB_ICON: Record<string, string> = {
   fixture: '🔧',
@@ -18,7 +26,30 @@ const VERB_ICON: Record<string, string> = {
 };
 
 /**
- * Floating joystick: touch anywhere on the left side and drag. Push to the rim to sprint.
+ * Pointer handlers for a button you hold down (interact, sprint): captures the finger so sliding
+ * off the button doesn't drop it, and lets go on release, cancel or lost capture.
+ */
+function holdHandlers(key: 'interact' | 'sprint') {
+  const set = (el: HTMLElement, on: boolean) => {
+    virtualInput[key] = on;
+    el.dataset.held = String(on);
+  };
+  const hold = (on: boolean) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    if (on) e.currentTarget.setPointerCapture?.(e.pointerId);
+    set(e.currentTarget, on);
+  };
+  return {
+    onPointerDown: hold(true),
+    onPointerUp: hold(false),
+    onPointerCancel: hold(false),
+    onLostPointerCapture: (e: ReactPointerEvent<HTMLButtonElement>) => set(e.currentTarget, false),
+    onContextMenu: (e: ReactMouseEvent) => e.preventDefault(),
+  };
+}
+
+/**
+ * Floating joystick: touch anywhere on the left side and drag; ease off to walk slowly.
  * Updates the DOM directly on move so dragging never re-renders React.
  */
 function Joystick() {
@@ -33,9 +64,8 @@ function Joystick() {
     base.current!.style.top = `${y - rect.top}px`;
   };
 
-  const setKnob = (dx: number, dy: number, sprint: boolean) => {
+  const setKnob = (dx: number, dy: number) => {
     knob.current!.style.transform = `translate(${dx}px, ${dy}px)`;
-    base.current!.dataset.sprint = String(sprint);
   };
 
   const onDown = (e: ReactPointerEvent) => {
@@ -66,11 +96,7 @@ function Joystick() {
     const angle = Math.atan2(dy, dx);
     virtualInput.stickX = Math.cos(angle) * clamped;
     virtualInput.stickY = -Math.sin(angle) * clamped;
-    setKnob(
-      Math.cos(angle) * clamped * STICK_RADIUS,
-      Math.sin(angle) * clamped * STICK_RADIUS,
-      clamped >= SPRINT_AT,
-    );
+    setKnob(Math.cos(angle) * clamped * STICK_RADIUS, Math.sin(angle) * clamped * STICK_RADIUS);
   };
 
   const onUp = (e: ReactPointerEvent) => {
@@ -78,7 +104,7 @@ function Joystick() {
     active.current = null;
     virtualInput.stickX = 0;
     virtualInput.stickY = 0;
-    setKnob(0, 0, false);
+    setKnob(0, 0);
     base.current!.dataset.active = 'false';
     base.current!.style.left = '';
     base.current!.style.top = '';
@@ -108,31 +134,17 @@ function InteractButton() {
     useShallow((s) => {
       const p = s.snapshot?.prompt;
       return p
-        ? {
-            kind: p.kind,
-            verb: p.verb,
-            enabled: p.enabled,
-            progress: Math.round(p.progress * 40) / 40,
-          }
+        ? { kind: p.kind, verb: p.verb, enabled: p.enabled, progress: step(p.progress) }
         : null;
     }),
   );
-  const hold = (on: boolean) => (e: ReactPointerEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    if (on) e.currentTarget.setPointerCapture?.(e.pointerId);
-    virtualInput.interact = on;
-  };
   const ready = !!prompt?.enabled;
   return (
     <button
       type="button"
-      className={[styles.btn, styles.interact, ready && styles.ready].filter(Boolean).join(' ')}
-      style={{ '--progress': prompt?.progress ?? 0 } as CSSProperties}
-      onPointerDown={hold(true)}
-      onPointerUp={hold(false)}
-      onPointerCancel={hold(false)}
-      onLostPointerCapture={() => (virtualInput.interact = false)}
-      onContextMenu={(e) => e.preventDefault()}
+      className={cx(styles.btn, styles.ring, styles.interact, ready && styles.ready)}
+      style={{ '--fill': prompt?.progress ?? 0 } as CSSProperties}
+      {...holdHandlers('interact')}
       aria-label={prompt ? `Hold to ${prompt.verb}` : 'Interact'}
       data-testid="touch-interact"
     >
@@ -142,21 +154,27 @@ function InteractButton() {
   );
 }
 
-function CrouchButton() {
-  const crouching = useShiftStore((s) => s.snapshot?.crouching ?? false);
+/** Hold to sprint. Its ring is your stamina (it shimmers while an energy drink lasts). */
+function SprintButton() {
+  const { fill, boost } = useShiftStore(
+    useShallow((s) => ({
+      fill: step((s.snapshot?.stamina ?? 0) / (s.snapshot?.staminaMax ?? 1)),
+      boost: (s.snapshot?.boost ?? 0) > 0,
+    })),
+  );
   return (
     <button
       type="button"
-      className={[styles.btn, styles.small, crouching && styles.on].filter(Boolean).join(' ')}
-      onPointerDown={(e) => {
-        e.preventDefault();
-        virtualInput.press({ type: 'crouch' });
-      }}
-      aria-label={crouching ? 'Stand up' : 'Crouch'}
-      aria-pressed={crouching}
+      className={cx(styles.btn, styles.ring, styles.sprint)}
+      style={{ '--fill': boost ? 1 : fill } as CSSProperties}
+      data-boost={boost}
+      data-empty={!boost && fill <= 0}
+      {...holdHandlers('sprint')}
+      aria-label="Sprint"
+      data-testid="touch-sprint"
     >
-      <span className={styles.icon}>🧎</span>
-      <span className={styles.caption}>{crouching ? 'Stand' : 'Crouch'}</span>
+      <span className={styles.icon}>🏃</span>
+      <span className={styles.caption}>Sprint</span>
     </button>
   );
 }
@@ -165,9 +183,14 @@ function AbilityButton() {
   const ability = useShiftStore(
     useShallow((s) => {
       const a = s.snapshot?.ability;
-      return a && a.kind === 'active'
-        ? { name: a.name, active: a.active > 0, cooldown: Math.ceil(a.cooldown) }
-        : null;
+      if (!a || a.kind !== 'active') return null;
+      const active = a.active > 0;
+      return {
+        name: a.name,
+        active,
+        cooldown: Math.ceil(a.cooldown),
+        fill: step(active ? a.active / a.duration : 1 - a.cooldown / a.cooldownMax),
+      };
     }),
   );
   if (!ability) return null;
@@ -175,7 +198,8 @@ function AbilityButton() {
   return (
     <button
       type="button"
-      className={[styles.btn, styles.small, ability.active && styles.on].filter(Boolean).join(' ')}
+      className={cx(styles.btn, styles.ring, styles.small, ability.active && styles.on)}
+      style={{ '--fill': ability.fill } as CSSProperties}
       disabled={!ready && !ability.active}
       onPointerDown={(e) => {
         e.preventDefault();
@@ -184,9 +208,10 @@ function AbilityButton() {
       aria-label={ability.name}
     >
       <span className={styles.icon}>✨</span>
-      <span className={styles.caption}>
-        {ability.active ? 'Active' : ready ? 'Ability' : `${ability.cooldown}s`}
-      </span>
+      {/* The ring shows the charge; words only while it's busy. */}
+      {(ability.active || !ready) && (
+        <span className={styles.caption}>{ability.active ? 'On' : `${ability.cooldown}s`}</span>
+      )}
     </button>
   );
 }
@@ -219,21 +244,6 @@ export function GadgetTray({ showKeys }: { showKeys: boolean }) {
   );
 }
 
-/** Thin stamina bar that sits above the action buttons on touch screens. */
-function StaminaStrip() {
-  const { fill, boost } = useShiftStore(
-    useShallow((s) => ({
-      fill: Math.round(((s.snapshot?.stamina ?? 0) / (s.snapshot?.staminaMax ?? 1)) * 40) / 40,
-      boost: (s.snapshot?.boost ?? 0) > 0,
-    })),
-  );
-  return (
-    <div className={styles.stamina} data-boost={boost} aria-label="Stamina">
-      <div style={{ width: `${fill * 100}%` }} />
-    </div>
-  );
-}
-
 /** Phone controls: floating joystick on the left, thumb buttons on the right. */
 export function TouchControls() {
   return (
@@ -241,10 +251,9 @@ export function TouchControls() {
       <Joystick />
       <div className={styles.actions}>
         <GadgetTray showKeys={false} />
-        <StaminaStrip />
         <div className={styles.cluster}>
           <AbilityButton />
-          <CrouchButton />
+          <SprintButton />
           <InteractButton />
         </div>
       </div>

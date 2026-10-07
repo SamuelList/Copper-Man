@@ -19,7 +19,6 @@ export class LevelGrid implements Grid {
   readonly cols: number;
   readonly rows: number;
   private readonly lockedDoors = new Set<number>();
-  private readonly lowCover = new Set<number>();
   private readonly solidBoxes = new Map<number, Box[]>();
   private readonly opaqueBoxes = new Map<number, Box[]>();
   /** Hitbox of every fixture and prop, by level object id. */
@@ -43,12 +42,9 @@ export class LevelGrid implements Grid {
       const def = PROPS.get(p.defId);
       const box = this.place(p.id, def.footprint, p.tile.col, p.tile.row);
       if (def.height === 'tall') this.push(this.opaqueBoxes, p.tile.col, p.tile.row, box);
-      else this.lowCover.add(this.key(p.tile.col, p.tile.row));
     }
     for (const f of level.fixtures) {
-      const def = FIXTURES.get(f.defId);
-      this.place(f.id, def.footprint, f.tile.col, f.tile.row);
-      if (def.cover === 'low') this.lowCover.add(this.key(f.tile.col, f.tile.row));
+      this.place(f.id, FIXTURES.get(f.defId).footprint, f.tile.col, f.tile.row);
     }
     this.sightCorners = this.collectCorners();
   }
@@ -89,10 +85,6 @@ export class LevelGrid implements Grid {
     const kind = tileAt(this.level, col, row);
     if (kind === 'lockedDoor') return this.isLocked(col, row);
     return kind === 'wall' || kind === 'van';
-  }
-
-  isLowCover(col: number, row: number): boolean {
-    return this.lowCover.has(this.key(col, row));
   }
 
   solidBoxesAt(col: number, row: number): readonly Box[] {

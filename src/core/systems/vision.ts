@@ -1,4 +1,3 @@
-import { BALANCE } from '../content/balance';
 import type { Grid } from '../level/grid';
 import type { Box, Vec2 } from '../model/types';
 import { angleDiff, angleTo, dist } from '../util/math';
@@ -100,33 +99,11 @@ export function castRay(grid: Grid, origin: Vec2, angle: number, maxDist: number
   return hit;
 }
 
+/** Walls, locked doors, the van and the real shape of tall furniture all block sight. */
 export function hasLineOfSight(grid: Grid, from: Vec2, to: Vec2): boolean {
   const d = dist(from, to);
   if (d < 1e-6) return true;
   return castRay(grid, from, angleTo(from, to), d) >= d - 1e-6;
-}
-
-/**
- * Height-aware sight: walls and tall props always block; waist-high cover also blocks when the
- * target is crouching close behind it.
- */
-export function lineOfSight(grid: Grid, from: Vec2, to: Vec2, targetCrouching: boolean): boolean {
-  const d = dist(from, to);
-  if (d < 1e-6) return true;
-  const ts = grid.tileSize;
-  const reach = BALANCE.npc.vision.coverReach;
-  let blocked = false;
-  traverseRay(grid, from, angleTo(from, to), d - 1e-6, (col, row, t) => {
-    if (t <= 0) return false;
-    if (grid.isOpaque(col, row)) return (blocked = true);
-    if (targetCrouching && grid.isLowCover(col, row)) {
-      const cx = (col + 0.5) * ts;
-      const cy = (row + 0.5) * ts;
-      if (Math.hypot(cx - to.x, cy - to.y) <= reach) return (blocked = true);
-    }
-    return false;
-  });
-  return !blocked;
 }
 
 export interface ViewCone {
@@ -142,8 +119,8 @@ export function inCone(cone: ViewCone, target: Vec2): boolean {
   return Math.abs(angleDiff(cone.facing, angleTo(cone.pos, target))) <= cone.fov / 2;
 }
 
-export function canSee(grid: Grid, cone: ViewCone, target: Vec2, targetCrouching = false): boolean {
-  return inCone(cone, target) && lineOfSight(grid, cone.pos, target, targetCrouching);
+export function canSee(grid: Grid, cone: ViewCone, target: Vec2): boolean {
+  return inCone(cone, target) && hasLineOfSight(grid, cone.pos, target);
 }
 
 const EPS_ANGLE = 1e-4;

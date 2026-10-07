@@ -4,7 +4,7 @@ import { expect, test, type CDPSession, type Locator, type Page } from '@playwri
 interface DebugWindow {
   __copper?: {
     session: {
-      player: { pos: { x: number; y: number }; crouching: boolean; stamina: number };
+      player: { pos: { x: number; y: number }; sprinting: boolean; stamina: number };
       boss: { pos: { x: number; y: number } };
       bag: { capacity: number; contents: Record<string, number> };
       vanBoxes: { minX: number; maxX: number; minY: number; maxY: number }[];
@@ -22,7 +22,7 @@ const player = (page: Page) =>
     return {
       x: s.player.pos.x,
       y: s.player.pos.y,
-      crouching: s.player.crouching,
+      sprinting: s.player.sprinting,
       stamina: s.player.stamina,
       drinks: s.inventory['energy-drink'] ?? 0,
     };
@@ -80,13 +80,23 @@ test('plays a shift with touch controls on a phone', async ({ page }, testInfo) 
   // Screen-right on the iso camera is +x and +y on the map.
   expect(walked.x - start.x).toBeGreaterThan(4);
   expect(walked.y - start.y).toBeGreaterThan(4);
-  await touch(cdp, 'touchEnd', []);
+  // Walking (even with the stick pushed all the way) never sprints.
+  expect(walked.sprinting).toBe(false);
 
-  // Crouch button toggles crouching.
-  await page.getByRole('button', { name: 'Crouch' }).tap();
-  await expect.poll(async () => (await player(page)).crouching).toBe(true);
-  await page.getByRole('button', { name: 'Stand up' }).tap();
-  await expect.poll(async () => (await player(page)).crouching).toBe(false);
+  // Hold the sprint button with the other thumb while steering: the worker runs.
+  const sprintBtn = await center(page.getByTestId('touch-sprint'));
+  const steer = { ...from, x: from.x + 35 };
+  await touch(cdp, 'touchStart', [from]);
+  await touch(cdp, 'touchMove', [steer]);
+  await touch(cdp, 'touchStart', [steer, { ...sprintBtn, id: 2 }]);
+  await expect.poll(async () => (await player(page)).sprinting).toBe(true);
+  await touch(cdp, 'touchEnd', []);
+  // Once it's let go, walking is just walking again.
+  await touch(cdp, 'touchStart', [from]);
+  await touch(cdp, 'touchMove', [steer]);
+  await page.waitForTimeout(300);
+  expect((await player(page)).sprinting).toBe(false);
+  await touch(cdp, 'touchEnd', []);
 
   // Gadgets show up in the tray and fire on tap.
   await page.evaluate(() => {

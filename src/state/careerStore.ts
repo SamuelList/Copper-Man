@@ -44,7 +44,7 @@ export interface CareerActions {
 export type CareerStore = CareerData & CareerActions;
 
 export const SAVE_KEY = 'copper-man/career';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export const initialCareer = (): CareerData => ({
   active: false,
@@ -104,6 +104,10 @@ export function migrateCareer(persisted: unknown, fromVersion: number): CareerDa
         roomsDiscovered: [],
       };
     }
+  }
+  if (fromVersion < 4) {
+    // v3 had crouching; its Low Rider skill became Rubber Soles.
+    data.skills = (data.skills ?? []).map((id) => (id === 'low-rider' ? 'rubber-soles' : id));
   }
   return data;
 }

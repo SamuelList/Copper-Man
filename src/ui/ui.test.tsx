@@ -143,7 +143,6 @@ describe('Hud', () => {
     escalation: 0,
     suspicious: true,
     grace: 0,
-    crouching: true,
     light: 0.25,
     xp: 40,
     inventory: { 'energy-drink': 2 },
@@ -160,7 +159,7 @@ describe('Hud', () => {
     expect(screen.getByTestId('interact-prompt')).toHaveTextContent('Scrap — Wall Heater');
     expect(screen.getByLabelText('2 of 3 hearts left')).toBeInTheDocument();
     expect(screen.getByTestId('visibility')).toHaveTextContent('Dark');
-    expect(screen.getByTestId('visibility')).toHaveTextContent('Crouching');
+    expect(screen.getByText('Looking suspicious')).toBeInTheDocument();
   });
 
   it('swaps keyboard hints for thumb controls on a touch screen', () => {
@@ -171,9 +170,27 @@ describe('Hud', () => {
     expect(screen.getByTestId('interact-prompt')).toHaveTextContent('Scrap — Wall Heater');
     expect(screen.getByTestId('interact-prompt')).not.toHaveTextContent('Hold E');
 
+    // The compact top bar: clock, bag, light gem, detection, cash, hearts.
+    expect(screen.getByTestId('shift-timer')).toHaveTextContent('2:06');
+    expect(screen.getByTestId('bag')).toHaveAccessibleName('Scrap bag: 0.25 of 2.00');
+    expect(screen.getByTestId('visibility')).toHaveAccessibleName('Dark: hard to spot');
+    expect(screen.getByRole('meter', { name: 'Detection' })).toHaveAttribute(
+      'aria-valuetext',
+      'Suspicious',
+    );
+    expect(screen.getByTestId('shift-earned')).toHaveTextContent('$65');
+    expect(screen.getByLabelText('2 of 3 hearts left')).toBeInTheDocument();
+    expect(screen.queryByText('Scrap bag')).not.toBeInTheDocument();
+
     fireEvent.pointerDown(screen.getByRole('button', { name: /Use Energy Drink/ }));
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Stand up' }));
-    expect(virtualInput.drain()).toEqual([{ type: 'use', id: 'energy-drink' }, { type: 'crouch' }]);
+    expect(virtualInput.drain()).toEqual([{ type: 'use', id: 'energy-drink' }]);
+
+    // Sprint is a button you hold (not the edge of the stick).
+    const sprint = screen.getByRole('button', { name: 'Sprint' });
+    fireEvent.pointerDown(sprint);
+    expect(virtualInput.sprint).toBe(true);
+    fireEvent.pointerUp(sprint);
+    expect(virtualInput.sprint).toBe(false);
 
     const interact = screen.getByTestId('touch-interact');
     fireEvent.pointerDown(interact);

@@ -22,7 +22,7 @@ describe('progression', () => {
     expect(canLearn('night-owl', [], 5)).toEqual({ ok: false, reason: 'locked' });
     expect(canLearn('soft-steps', [], 0)).toEqual({ ok: false, reason: 'points' });
     // The fork rejoins: either branch opens Smooth Hands.
-    expect(canLearn('smooth-hands', ['soft-steps', 'low-rider'], 1)).toMatchObject({ ok: true });
+    expect(canLearn('smooth-hands', ['soft-steps', 'rubber-soles'], 1)).toMatchObject({ ok: true });
     expect(canLearn('ghost', ['smooth-hands'], 1)).toEqual({ ok: false, reason: 'points' });
     expect(canLearn('ghost', ['smooth-hands'], 2)).toEqual({ ok: true, cost: 2 });
     expect(canLearn('telekinesis', [], 9)).toEqual({ ok: false, reason: 'unknown' });

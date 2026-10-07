@@ -346,7 +346,7 @@ describe('ShiftSession progression + gadgets', () => {
   });
 });
 
-describe('ShiftSession stealth: crouching, cover, light, sight', () => {
+describe('ShiftSession stealth: cover, light, sight', () => {
   // Boss starts at 1 facing east, a desk (k) and a locker (O) sit between it and the player.
   const STEALTH = ['##########', '#1...k.P.#', '#2.......#', '#V..O...Z#', '##########'];
   const fullRoom = (light?: number) => [
@@ -374,30 +374,36 @@ describe('ShiftSession stealth: crouching, cover, light, sight', () => {
     return s;
   }
 
-  it('crouching moves at half speed and blocks sprinting', () => {
+  it('sprinting is faster than walking and burns stamina', () => {
     const walk = stealthSession();
-    const crouch = stealthSession();
+    const sprint = stealthSession();
     placePlayer(walk, 2, 2);
-    placePlayer(crouch, 2, 2);
+    placePlayer(sprint, 2, 2);
     hold(walk, 0.5, input({ moveX: 1 }));
-    hold(crouch, 0.5, input({ moveX: 1, crouch: true, sprint: true }));
+    hold(sprint, 0.5, input({ moveX: 1, sprint: true }));
     const walked = walk.player.pos.x - 2.5 * TILE_SIZE;
-    const crept = crouch.player.pos.x - 2.5 * TILE_SIZE;
-    expect(crept).toBeCloseTo(walked / 2, 0);
-    expect(crouch.player.sprinting).toBe(false);
-    expect(crouch.getSnapshot().crouching).toBe(true);
+    const ran = sprint.player.pos.x - 2.5 * TILE_SIZE;
+    expect(ran).toBeCloseTo(walked * BALANCE.player.sprintMult, 0);
+    expect(sprint.player.sprinting).toBe(true);
+    expect(sprint.player.stamina).toBeLessThan(walk.player.stamina);
   });
 
-  it('a crouching worker behind a desk is not spotted; standing they are', () => {
-    const standing = stealthSession();
-    placePlayer(standing, 6, 1);
-    hold(standing, 0.2, input());
-    expect(standing.boss.detection).toBeGreaterThan(0);
+  it('a desk is no cover, but a worker behind the lockers is out of sight', () => {
+    const open = stealthSession();
+    placePlayer(open, 6, 1);
+    hold(open, 0.2, input());
+    expect(open.boss.detection).toBeGreaterThan(0);
 
-    const crouched = stealthSession();
-    placePlayer(crouched, 6, 1);
-    hold(crouched, 0.2, input({ crouch: true }));
-    expect(crouched.boss.detection).toBe(0);
+    // Looking along row 3: the locker at (4,3) fills its southern half.
+    const sightline = (y: number) => {
+      const s = stealthSession();
+      s.boss.pos = { x: 1.5 * TILE_SIZE, y: 3.75 * TILE_SIZE };
+      s.player.pos = { x: 6.5 * TILE_SIZE, y: y * TILE_SIZE };
+      hold(s, 0.2, input());
+      return s.boss.detection;
+    };
+    expect(sightline(3.75)).toBe(0);
+    expect(sightline(3.25)).toBeGreaterThan(0);
   });
 
   it('spots you more slowly in the dark', () => {
@@ -412,12 +418,12 @@ describe('ShiftSession stealth: crouching, cover, light, sight', () => {
     expect(dark.boss.detection).toBeLessThan(lit.boss.detection * 0.6);
   });
 
-  it('tall props block sight with their real shape; low props are cover', () => {
+  it('tall props block sight with their real shape; low props do not', () => {
     const s = stealthSession();
     // The locker at (4,3) backs onto the south wall and is half a tile deep.
     expect(s.grid.isOpaque(4, 3)).toBe(false);
     expect(s.grid.opaqueBoxesAt(4, 3)).toHaveLength(1);
-    expect(s.grid.isLowCover(5, 1)).toBe(true); // desk
+    expect(s.grid.opaqueBoxesAt(5, 1)).toHaveLength(0); // desk
     s.player.pos = { x: 2.5 * TILE_SIZE, y: 3.75 * TILE_SIZE };
     expect(s.isVisibleToPlayer({ x: 6.5 * TILE_SIZE, y: 3.75 * TILE_SIZE })).toBe(false); // through it
     s.player.pos = { x: 2.5 * TILE_SIZE, y: 3.25 * TILE_SIZE };
@@ -602,11 +608,12 @@ describe('ShiftSession: the head custodian and wet floors', () => {
     '#Z........Q..#',
     '##############',
   ];
-  const shift = () =>
+  const shift = (skills: string[] = []) =>
     new ShiftSession({
       level: testLevel(CUST),
       characterId: 'dalton',
       ownedUpgrades: [],
+      skills,
       day: 1,
       warnings: 0,
       seed: 4,
@@ -639,22 +646,23 @@ describe('ShiftSession: the head custodian and wet floors', () => {
     expect(s.wet.size).toBeGreaterThan(0);
   });
 
-  it('wet floor squeaks underfoot (Mr. Gravy hears it), but not if you creep', () => {
-    const s = shift();
-    const squeaks = record(s, 'player:squeak');
-    s.custodian!.mode = 'refill';
-    s.custodian!.timer = 100;
-    for (let c = 3; c <= 8; c++) s.wet.set(2 * s.level.cols + c, 30);
-    s.boss.pos = { x: 9.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
-    s.boss.facing = 0;
-    s.boss.mode = 'inspect';
-    s.boss.timer = 100;
-    s.player.pos = { x: 3.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
-    hold(s, 0.6, input({ moveX: 1, crouch: true }));
-    expect(squeaks).toHaveLength(0);
-    hold(s, 0.3, input({ moveX: 1 }));
-    expect(squeaks.length).toBeGreaterThan(0);
-    expect(s.boss.mode).toBe('investigate');
-    expect(s.boss.focus).toBe('noise');
+  it('wet floor squeaks underfoot and Mr. Gravy hears it (less far in Rubber Soles)', () => {
+    const walkAcrossWetFloor = (skills: string[]) => {
+      const s = shift(skills);
+      const squeaks = record(s, 'player:squeak');
+      s.custodian!.mode = 'refill';
+      s.custodian!.timer = 100;
+      for (let c = 3; c <= 8; c++) s.wet.set(2 * s.level.cols + c, 30);
+      s.boss.pos = { x: 9.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
+      s.boss.facing = 0;
+      s.boss.mode = 'inspect';
+      s.boss.timer = 100;
+      s.player.pos = { x: 3.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
+      hold(s, 0.6, input({ moveX: 1 }));
+      expect(squeaks.length).toBeGreaterThan(0);
+      return s.boss;
+    };
+    expect(walkAcrossWetFloor([])).toMatchObject({ mode: 'investigate', focus: 'noise' });
+    expect(walkAcrossWetFloor(['soft-steps', 'rubber-soles']).mode).toBe('inspect');
   });
 });

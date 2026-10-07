@@ -33,13 +33,13 @@ function PauseOverlay() {
         </Button>
         {touch ? (
           <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
-            Drag on the left to walk; push to the edge to sprint. Hold ✋ to scrap, unlock and sell.
-            Tap gadgets to use them.
+            Drag on the left to walk. Hold 🏃 to sprint and ✋ to scrap, unlock and sell. Tap
+            gadgets to use them.
           </p>
         ) : (
           <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
-            <Kbd>WASD</Kbd> move · <Kbd>Shift</Kbd> sprint · <Kbd>E</Kbd> interact · <Kbd>C</Kbd>{' '}
-            crouch · <Kbd>Q</Kbd> ability · <Kbd>1</Kbd>-<Kbd>3</Kbd> gadgets · <Kbd>Esc</Kbd> pause
+            <Kbd>WASD</Kbd> move · <Kbd>Shift</Kbd> sprint · <Kbd>E</Kbd> interact · <Kbd>Q</Kbd>{' '}
+            ability · <Kbd>1</Kbd>-<Kbd>3</Kbd> gadgets · <Kbd>Esc</Kbd> pause
           </p>
         )}
       </Panel>

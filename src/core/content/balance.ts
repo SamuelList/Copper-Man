@@ -31,8 +31,6 @@ export const BALANCE = {
     /** How close (from the edge of the object) you must be to interact with it. */
     reach: TILE_SIZE * 0.85,
     caughtGraceSeconds: 3,
-    /** Crouching halves speed (and disables sprint) but hides you behind low cover. */
-    crouchSpeedMult: 0.5,
     /** How far the player can see (fog of war). */
     sightRange: TILE_SIZE * 16,
   },
@@ -89,8 +87,6 @@ export const BALANCE = {
       /** Inner part of the cone (fraction of range) where you're spotted fast. */
       nearFraction: 0.4,
       nearMult: 2.6,
-      /** Low cover hides a crouching target when it's within this distance of them. */
-      coverReach: TILE_SIZE * 1.6,
       /** In total darkness, detection fills this fraction as fast… */
       darkFillMult: 0.35,
       /** …and NPCs can only spot you at this fraction of their range. */

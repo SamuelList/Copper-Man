@@ -1,0 +1,242 @@
+/* Phone HUD bar: a row of small frosted-glass chips across the top of the screen. */
+
+.bar {
+  position: absolute;
+  top: max(6px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  right: max(8px, env(safe-area-inset-right));
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto;
+  grid-template-areas: 'shift bag detect status pause';
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  text-shadow: none;
+}
+
+.chip {
+  height: 30px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(10 12 16 / 0.5);
+  border: 1px solid rgb(255 255 255 / 0.09);
+  box-shadow:
+    0 2px 10px rgb(0 0 0 / 0.25),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---- Clock ---- */
+
+.shift {
+  grid-area: shift;
+  justify-self: start;
+  padding-left: 5px;
+}
+
+/* Light gem: dark in shadow, glowing when lit. */
+.gem {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(255 255 255 / 0.2);
+  background: radial-gradient(
+    circle at 40% 35%,
+    rgb(255 236 170 / var(--light)),
+    rgb(120 90 30 / calc(var(--light) * 0.9)) 60%,
+    #0a0a0c 100%
+  );
+  box-shadow: 0 0 calc(var(--light) * 12px) rgb(255 210 120 / calc(var(--light) * 0.55));
+}
+
+.clock {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.low {
+  color: var(--bad);
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+.room {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 17ch;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* ---- Bag ---- */
+
+.bag {
+  grid-area: bag;
+  justify-self: start;
+  padding-left: 7px;
+}
+
+.bagIcon {
+  font-size: 14px;
+}
+
+.bagBar {
+  display: flex;
+  width: 54px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.13);
+}
+
+.bagBar > span {
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.num {
+  min-width: 3.4ch;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.cap {
+  opacity: 0.6;
+  font-size: 10px;
+}
+
+.full {
+  border-color: rgb(255 183 77 / 0.6);
+}
+
+.full .num {
+  color: var(--warn);
+}
+
+/* ---- Detection ---- */
+
+.detect {
+  grid-area: detect;
+  justify-self: center;
+  --tone: var(--good);
+}
+
+.detect[data-tone='warn'] {
+  --tone: var(--warn);
+  border-color: rgb(255 183 77 / 0.4);
+}
+
+.detect[data-tone='bad'] {
+  --tone: var(--bad);
+}
+
+.meter {
+  width: 44px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.13);
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  background: var(--tone);
+  transition: width 0.1s linear;
+}
+
+.detectLabel {
+  color: var(--tone);
+}
+
+.escalation {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--warn);
+}
+
+.spotted {
+  background: rgb(110 18 18 / 0.65);
+  border-color: var(--bad);
+  color: #ffcdd2;
+  animation: pulse 0.6s ease-in-out infinite;
+}
+
+/* ---- Cash, hearts, XP ---- */
+
+.status {
+  grid-area: status;
+  justify-self: end;
+  gap: 8px;
+}
+
+.cash {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--good);
+}
+
+.hearts {
+  display: flex;
+  gap: 1px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.heart {
+  color: #ef5350;
+}
+
+.heartLost {
+  color: rgb(255 255 255 / 0.18);
+}
+
+/* The XP counter (shared with the desktop card). */
+.status > :last-child {
+  margin: 0;
+  font-size: 11px;
+}
+
+/* ---- Pause ---- */
+
+.bar > button {
+  grid-area: pause;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgb(10 12 16 / 0.5);
+  border-color: rgb(255 255 255 / 0.09);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+}
+
+/* Portrait phones: two rows (clock + cash on top, bag + detection below). */
+@media (max-width: 560px) {
+  .bar {
+    grid-template-columns: auto 1fr auto auto;
+    grid-template-areas:
+      'shift shift status pause'
+      'bag detect detect detect';
+  }
+
+  .detect {
+    justify-self: end;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}

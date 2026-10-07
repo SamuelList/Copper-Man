@@ -108,7 +108,7 @@ describe('stats + upgrades', () => {
     const s = deriveStats(
       dalton,
       ['work-gloves', 'mechanics-gloves', 'scrapyard-card', 'walkie-talkie'],
-      ['soft-steps', 'smooth-hands', 'ghost', 'haggler', 'union-rep', 'overtime', 'low-rider'],
+      ['soft-steps', 'smooth-hands', 'ghost', 'haggler', 'union-rep', 'overtime', 'rubber-soles'],
     );
     // Only the best gloves count, then Smooth Hands on top.
     expect(s.scrapNoticeMult).toBeCloseTo(0.6 * 0.75);
@@ -118,7 +118,8 @@ describe('stats + upgrades', () => {
     expect(s.hearingRange).toBe(base.hearingRange + 3 * TILE_SIZE);
     expect(s.maxWarnings).toBe(BALANCE.warnings.max + 1);
     expect(s.shiftSeconds).toBe(BALANCE.shift.durationSeconds + 60);
-    expect(s.crouchSpeedFactor).toBeCloseTo(BALANCE.player.crouchSpeedMult * 1.4);
+    expect(s.noiseMult).toBe(0.5);
+    expect(base.noiseMult).toBe(1);
     expect(base.carryNoticeMult).toBe(1);
   });
 });

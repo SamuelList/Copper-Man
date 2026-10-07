@@ -60,8 +60,8 @@ export function TitleScreen() {
             Security doors need the Master Key or bolt cutters.
           </li>
           <li>
-            <strong>Use the dark and the furniture.</strong> Dark rooms make you harder to spot.
-            Crouch (<strong>C</strong>) behind desks, tables and fixtures.
+            <strong>Use the dark and the furniture.</strong> Dark rooms make you harder to spot, and
+            lockers, shelves and stalls block sight. Sprinting is loud, and so are wet floors.
           </li>
           <li>
             <strong>{BALANCE.warnings.max} warnings and you&apos;re fired.</strong> Find your sleepy

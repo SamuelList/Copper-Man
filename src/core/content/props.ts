@@ -2,8 +2,8 @@ import type { PropDef } from '../model/types';
 import { createRegistry } from './registry';
 
 /**
- * Furniture that shapes stealth: tall props break line of sight, low props are cover for a
- * crouching worker. Placed in maps by glyph like fixtures, but can't be scrapped.
+ * Furniture that shapes stealth: tall props break line of sight, low props are just in the way.
+ * Placed in maps by glyph like fixtures, but can't be scrapped.
  */
 export const PROPS = createRegistry<PropDef>('prop', [
   {

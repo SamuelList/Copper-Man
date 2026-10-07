@@ -14,8 +14,6 @@ export interface Grid {
   isSolid(col: number, row: number): boolean;
   /** The whole tile blocks line of sight. */
   isOpaque(col: number, row: number): boolean;
-  /** Waist-high: hides a crouching target standing right behind it. */
-  isLowCover(col: number, row: number): boolean;
   /** Object hitboxes (pixels) inside this tile that block movement. */
   solidBoxesAt(col: number, row: number): readonly Box[];
   /** Object boxes (pixels) inside this tile that block line of sight (tall furniture). */

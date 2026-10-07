@@ -1,5 +1,5 @@
 /** One-shot actions from on-screen buttons. */
-export type VirtualAction = { type: 'ability' } | { type: 'crouch' } | { type: 'use'; id: string };
+export type VirtualAction = { type: 'ability' } | { type: 'use'; id: string };
 
 /**
  * On-screen controls (the touch joystick and HUD buttons) write here, and the game's input
@@ -10,7 +10,7 @@ export const virtualInput = {
   /** Joystick in screen space, -1..1 on each axis (+y is up the screen). */
   stickX: 0,
   stickY: 0,
-  /** Stick pushed to the rim: sprint. */
+  /** Sprint button held. */
   sprint: false,
   /** Interact button held. */
   interact: false,

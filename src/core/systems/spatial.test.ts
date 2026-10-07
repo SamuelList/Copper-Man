@@ -10,7 +10,6 @@ import {
   castRay,
   hasLineOfSight,
   inCone,
-  lineOfSight,
   visibilityOutline,
   visionPolygon,
 } from './vision';
@@ -65,20 +64,24 @@ describe('vision', () => {
   });
 });
 
-describe('cover and crouching', () => {
-  // A desk (k) sits between the observer (left) and the target spot right behind it.
-  const grid = testGrid(['#########', '#1....k.#', '#2.....P#', '#########']);
-  const observer = center(1, 1);
-  const behindDesk = center(7, 1);
-  const farFromDesk = center(4, 1);
-
-  it('hides a crouching target close behind low cover', () => {
-    expect(lineOfSight(grid, observer, behindDesk, false)).toBe(true);
-    expect(lineOfSight(grid, observer, behindDesk, true)).toBe(false);
+describe('furniture and sight', () => {
+  // A desk (k) in the top row; lockers (O) backed onto the south wall, half a tile deep.
+  const grid = testGrid(['#########', '#1....k.#', '#2......#', '#...O..P#', '#########']);
+  const at = (col: number, row: number) => ({ x: col * TILE_SIZE, y: row * TILE_SIZE });
+  const cone = (pos: { x: number; y: number }) => ({
+    pos,
+    facing: 0,
+    fov: Math.PI / 2,
+    range: TILE_SIZE * 10,
   });
 
-  it('does not hide a crouching target far from the cover', () => {
-    expect(lineOfSight(grid, observer, farFromDesk, true)).toBe(true);
+  it('sees straight over a desk', () => {
+    expect(canSee(grid, cone(center(1, 1)), center(7, 1))).toBe(true);
+  });
+
+  it('is blocked by the real shape of tall furniture', () => {
+    expect(canSee(grid, cone(at(1.5, 3.8)), at(7.5, 3.8))).toBe(false); // through the lockers
+    expect(canSee(grid, cone(at(1.5, 3.2)), at(7.5, 3.2))).toBe(true); // past their open half
   });
 });
 

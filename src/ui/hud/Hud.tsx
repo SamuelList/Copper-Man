@@ -1,27 +1,28 @@
 import { METAL_IDS, METALS } from '@core/content/metals';
 import { NPCS } from '@core/content/npcs';
 import { bagFree, bagTotal } from '@core/systems/bag';
-import { useInputMode } from '@state/inputMode';
 import { useShiftStore, type Toast } from '@state/shiftStore';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Kbd } from '../components';
 import { clock, css, money, units } from '../format';
+import {
+  LOW_TIME,
+  lightLabel,
+  useBag,
+  useDetection,
+  useLight,
+  useShiftClock,
+  useStatus,
+  useTouch,
+} from './hooks';
 import styles from './hud.module.css';
+import { TouchBar } from './TouchBar';
 import { GadgetTray, TouchControls } from './TouchControls';
-
-const useTouch = () => useInputMode((s) => s.mode === 'touch');
-
-const LOW_TIME = 30;
+import { PauseButton, XpCounter } from './widgets';
 
 function TimerCard() {
-  const { timeLeft, day, roomName } = useShiftStore(
-    useShallow((s) => ({
-      timeLeft: Math.ceil(s.snapshot?.timeLeft ?? 0),
-      day: s.snapshot?.day ?? 1,
-      roomName: s.snapshot?.roomName ?? '',
-    })),
-  );
+  const { timeLeft, day, roomName } = useShiftClock();
   return (
     <div className={styles.card}>
       <div className={styles.label}>Day {day} · Shift</div>
@@ -40,36 +41,8 @@ function TimerCard() {
   );
 }
 
-/** XP earned this shift; pops briefly whenever it goes up. */
-function XpCounter() {
-  const xp = useShiftStore((s) => s.snapshot?.xp ?? 0);
-  const last = useRef(xp);
-  const [pop, setPop] = useState(0);
-  useEffect(() => {
-    if (xp > last.current) {
-      const gained = xp - last.current;
-      setPop(gained);
-      const t = setTimeout(() => setPop(0), 900);
-      last.current = xp;
-      return () => clearTimeout(t);
-    }
-    last.current = xp;
-  }, [xp]);
-  return (
-    <div className={styles.xp} data-testid="shift-xp">
-      {pop > 0 && <span className={styles.xpPop}>+{pop}</span>}★ {xp} XP
-    </div>
-  );
-}
-
 function StatusCard() {
-  const { earned, warnings, max } = useShiftStore(
-    useShallow((s) => ({
-      earned: s.snapshot?.earned ?? 0,
-      warnings: s.snapshot?.warnings ?? 0,
-      max: s.snapshot?.maxWarnings ?? 3,
-    })),
-  );
+  const { earned, warnings, max } = useStatus();
   return (
     <div className={[styles.card, styles.status].join(' ')}>
       <div className={styles.label}>Sold this shift</div>
@@ -88,33 +61,9 @@ function StatusCard() {
   );
 }
 
-function PauseButton() {
-  const setPaused = useShiftStore((s) => s.setPaused);
-  const running = useShiftStore((s) => s.snapshot?.status === 'running');
-  return (
-    <button
-      type="button"
-      className={styles.pause}
-      onClick={() => setPaused(true)}
-      disabled={!running}
-      aria-label="Pause"
-    >
-      ❚❚
-    </button>
-  );
-}
-
 function BagCard() {
-  // Select primitives so the bag only re-renders when its contents actually change.
-  const flat = useShiftStore(
-    useShallow((s) => {
-      const b = s.snapshot?.bag;
-      return b ? { capacity: b.capacity, ...b.contents } : null;
-    }),
-  );
-  if (!flat) return null;
-  const { capacity, ...contents } = flat;
-  const bag = { capacity, contents };
+  const bag = useBag();
+  if (!bag) return null;
   const total = bagTotal(bag);
   return (
     <div className={[styles.card, styles.bag].join(' ')} data-testid="bag">
@@ -213,16 +162,7 @@ function AbilityCard() {
 }
 
 function DetectionCard() {
-  const { detection, bossMode, suspicious, escalation, grace } = useShiftStore(
-    useShallow((s) => ({
-      detection: Math.round((s.snapshot?.detection ?? 0) * 20) / 20,
-      bossMode: s.snapshot?.bossMode ?? 'patrol',
-      suspicious: s.snapshot?.suspicious ?? false,
-      escalation: s.snapshot?.escalation ?? 0,
-      grace: (s.snapshot?.grace ?? 0) > 0,
-    })),
-  );
-  const spotted = bossMode === 'chase';
+  const { detection, spotted, suspicious, escalation, grace, tone } = useDetection();
   const label = spotted
     ? 'SPOTTED!'
     : detection > 0
@@ -230,7 +170,7 @@ function DetectionCard() {
       : suspicious
         ? 'Looking suspicious'
         : 'Blending in';
-  const color = spotted ? 'var(--bad)' : detection > 0 ? 'var(--warn)' : 'var(--good)';
+  const color = `var(--${tone})`;
   return (
     <>
       <div
@@ -325,32 +265,17 @@ function Toasts() {
   );
 }
 
-/** How visible you are: the light where you stand, and whether you're crouched. */
+/** How visible you are: the light where you stand. */
 function VisibilityCard() {
-  const touch = useTouch();
-  const { light, crouching } = useShiftStore(
-    useShallow((s) => ({
-      light: Math.round((s.snapshot?.light ?? 1) * 20) / 20,
-      crouching: s.snapshot?.crouching ?? false,
-    })),
-  );
-  const label = light >= 0.75 ? 'Bright' : light >= 0.45 ? 'Dim' : 'Dark';
-  const hint = light >= 0.75 ? 'easy to spot' : light >= 0.45 ? 'harder to spot' : 'hard to spot';
+  const light = useLight();
+  const { label, hint } = lightLabel(light);
   return (
     <div className={[styles.card, styles.visibility].join(' ')} data-testid="visibility">
       <span className={styles.lightGem} style={{ '--light': light } as CSSProperties} aria-hidden />
       <span>
         <strong>{label}</strong> <span className={styles.label}>{hint}</span>
         <br />
-        <span className={styles.label}>
-          {crouching ? 'Crouching · hidden behind low cover' : 'Standing'}
-          {!touch && (
-            <>
-              {' '}
-              · <Kbd>C</Kbd>
-            </>
-          )}
-        </span>
+        <span className={styles.label}>Stick to the shadows</span>
       </span>
     </div>
   );
@@ -364,9 +289,6 @@ function Controls() {
       </span>
       <span>
         <Kbd>E</Kbd> hold to interact
-      </span>
-      <span>
-        <Kbd>C</Kbd> crouch
       </span>
       <span>
         <Kbd>Q</Kbd> ability
@@ -413,12 +335,24 @@ function EndBanner() {
 /** HUD overlay. Each card subscribes to just the slice it renders to keep re-renders cheap. */
 export function Hud() {
   const touch = useTouch();
+  if (touch) {
+    // Phones: a slim bar on top and thumb controls below, so the school gets the screen.
+    return (
+      <div className={styles.hud} data-testid="hud" data-touch>
+        <TouchBar />
+        <Toasts />
+        <div className={styles.bottomCenter}>
+          <PromptCard />
+        </div>
+        <TouchControls />
+        <EndBanner />
+      </div>
+    );
+  }
   return (
-    <div className={styles.hud} data-testid="hud" data-touch={touch}>
+    <div className={styles.hud} data-testid="hud">
       <div className={styles.topLeft}>
         <TimerCard />
-        {touch && <BagCard />}
-        {touch && <VisibilityCard />}
       </div>
       <div className={styles.topCenter}>
         <DetectionCard />
@@ -430,24 +364,18 @@ export function Hud() {
         </div>
       </div>
       <Toasts />
-      {!touch && (
-        <div className={styles.bottomLeft}>
-          <BagCard />
-          <Controls />
-        </div>
-      )}
+      <div className={styles.bottomLeft}>
+        <BagCard />
+        <Controls />
+      </div>
       <div className={styles.bottomCenter}>
         <PromptCard />
       </div>
-      {touch ? (
-        <TouchControls />
-      ) : (
-        <div className={styles.bottomRight}>
-          <GadgetTray showKeys />
-          <VisibilityCard />
-          <AbilityCard />
-        </div>
-      )}
+      <div className={styles.bottomRight}>
+        <GadgetTray showKeys />
+        <VisibilityCard />
+        <AbilityCard />
+      </div>
       <EndBanner />
     </div>
   );

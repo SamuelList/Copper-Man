@@ -85,8 +85,6 @@ export interface FixtureDef {
   /** Seconds to strip for a baseline worker (see BALANCE.scrapping). */
   workSeconds: number;
   risk: RiskLevel;
-  /** Waist-high fixtures hide a crouching worker. */
-  cover: 'low' | 'none';
   footprint: Footprint;
   color: number;
   /** Technical fixtures need gear or experience before they can be stripped. */
@@ -102,7 +100,7 @@ export interface Requirement {
   gear?: Partial<Record<UpgradeCategory, number>>;
 }
 
-/** Non-interactive furniture. Tall props block sight; low props are cover. */
+/** Non-interactive furniture. Tall props block sight; low ones are just in the way. */
 export interface PropDef {
   id: string;
   name: string;
@@ -137,7 +135,8 @@ export interface Modifiers {
   decayMult?: number;
   /** 0..1: how much better darkness hides you. */
   darkBonus?: number;
-  crouchSpeedMult?: number;
+  /** How far your noise carries: sprinting footsteps and squeaky wet floors. */
+  noiseMult?: number;
   /** Extra footstep-hearing range, tiles. */
   hearingBonus?: number;
   saleMult?: number;
@@ -274,13 +273,12 @@ export interface EffectiveStats {
   scrapRateMult: number;
   bagCapacity: number;
   unlockSeconds: number;
-  /** Crouch-walk speed as a fraction of walking speed. */
-  crouchSpeedFactor: number;
   noticeMult: number;
   scrapNoticeMult: number;
   carryNoticeMult: number;
   decayMult: number;
   darkBonus: number;
+  noiseMult: number;
   /** Footstep hearing range, pixels. */
   hearingRange: number;
   saleMult: number;

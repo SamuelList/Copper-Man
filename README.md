@@ -28,23 +28,22 @@ npm run dev        # http://localhost:5173
 
 ### Controls
 
-| Key           | Action                                              |
-| ------------- | --------------------------------------------------- |
-| WASD / arrows | Move (relative to the screen)                       |
-| Shift         | Sprint (stamina)                                    |
-| C             | Crouch / stand (half speed, hides you behind cover) |
-| E / Space     | **Hold** to scrap, unlock, sell, wake               |
-| Q             | Character ability                                   |
-| 1 / 2 / 3     | Use a gadget                                        |
-| Esc           | Pause / clock out early                             |
+| Key           | Action                                |
+| ------------- | ------------------------------------- |
+| WASD / arrows | Move (relative to the screen)         |
+| Shift         | Sprint (stamina, and it's loud)       |
+| E / Space     | **Hold** to scrap, unlock, sell, wake |
+| Q             | Character ability                     |
+| 1 / 2 / 3     | Use a gadget                          |
+| Esc           | Pause / clock out early               |
 
-**On a phone or tablet** the HUD switches to thumb controls as soon as you touch the screen:
+**On a phone or tablet** the HUD switches to thumb controls as soon as you touch the screen, and shrinks to one slim bar of glass chips across the top (clock and light gem, bag, who's noticed you, cash/hearts/XP, pause) so most of the screen is the school:
 
-- Drag anywhere on the left half to walk. A light push creeps; push to the rim to sprint.
-- Hold the big hand button to scrap, unlock, sell or wake. It shows the action and fills as you work.
-- Crouch, ability and gadget buttons sit next to it. The pause button is top right.
+- Drag anywhere on the left half to walk. Ease off the stick to walk slowly.
+- Hold the big hand button to scrap, unlock, sell or wake. It shows the action, and its ring fills as you work.
+- Hold the 🏃 button next to it to sprint. Its ring is your stamina. The ✨ ability button's ring shows its charge. Gadgets sit above them.
 
-Landscape is roomiest, but portrait works too. `?touch` forces touch controls on a desktop.
+Landscape is roomiest, but portrait works too (the bar takes two rows). `?touch` forces touch controls on a desktop.
 
 ## How it plays
 
@@ -64,7 +63,7 @@ Landscape is roomiest, but portrait works too. `?touch` forces touch controls on
 - **Earl, the head custodian,** works through a cleaning schedule: room after room, mopping a few spots in each, with trips back to his closet to wring out the mop. He doesn't care about full bags (he carries them all day), but:
   - He notices **stripped fixtures** as he goes, kneels to look, and may radio Mr. Gravy. He always calls in one that was stripped moments ago, and he gets less forgiving with every one he finds.
   - He calls in anyone he catches scrapping.
-  - His **wet floors** squeak underfoot; Mr. Gravy hears it if he's close. Crouch to creep across quietly, or wait for them to dry.
+  - His **wet floors** squeak underfoot; Mr. Gravy hears it if he's close. Walk around them, wait for them to dry, or learn **Rubber Soles** (Shadow tree), which halves how far your squeaks and sprinting carry.
 - **Students** have personalities, rolled each shift. Their look gives them away:
 
   | Look                  | Personality   | Behaviour                                                         |
@@ -79,7 +78,7 @@ Landscape is roomiest, but portrait works too. `?touch` forces touch controls on
 - **Exploring.** The school starts pitch black. What you've seen stays on your map (greyed out when it's out of sight) and is saved with your career. Every new room is worth XP. You only see people in your line of sight; a fading ghost marks where you last saw them, and a pulsing ring shows footsteps you can hear through walls.
 - **Line of sight.**
   - **Vision cones** are clipped exactly against walls and tall furniture. The bright inner zone spots you fast; the faint outer zone is slow to notice you.
-  - **Cover:** crouch (C) behind desks, tables, counters, bins and benches to break line of sight. Lockers, shelves, bookshelves, stall dividers and boilers block sight entirely.
+  - **Cover:** lockers, shelves, bookshelves, stall dividers and boilers block sight entirely, so duck behind them. Desks, tables, counters, bins and benches are only in the way: people see straight over them.
   - **Light:** every room has a light level. In the dark (the boiler, mechanical and server rooms, closets) people notice you more slowly and from less far away. The HUD light meter shows how exposed you are.
 - **Sleepy coworker.** Asleep somewhere different each shift. Find them to win back a heart.
 - **The school** is about twice the size of the first version. The van is on the west side; the further east you go, the bigger the scrap and the longer the walk back. That's where speed, bag size and skills pay off.
