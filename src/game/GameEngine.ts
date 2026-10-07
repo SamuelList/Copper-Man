@@ -3,7 +3,7 @@ import { CHARACTERS } from '@core/content/characters';
 import { ShiftSession } from '@core/session/ShiftSession';
 import type { ShiftConfig, ShiftSummary } from '@core/session/types';
 import { bagTotal } from '@core/systems/bag';
-import { bossLine } from '@state/messages';
+import { bossLine, custodianLine } from '@state/messages';
 import { useShiftStore } from '@state/shiftStore';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -32,6 +32,7 @@ import {
 import { createWorldShading, MaterialKit } from './render/materials';
 import {
   buildBoss,
+  buildCustodian,
   buildStudent,
   buildTeacher,
   buildWorker,
@@ -40,6 +41,7 @@ import {
 } from './render/models';
 import { PALETTE, STUDENT_SHIRTS } from './render/palette';
 import { QualityGovernor } from './render/quality';
+import { WetFloors } from './render/wetFloors';
 import { VisionCone } from './render/visionCones';
 import { buildWorld, type World } from './render/world';
 
@@ -86,6 +88,10 @@ export class GameEngine {
   private readonly boss: NpcViews;
   private readonly students: NpcViews[];
   private readonly teachers: NpcViews[];
+  private readonly custodian: NpcViews | null;
+  private readonly wetFloors: WetFloors;
+  /** Seconds until the custodian next mutters something while he mops. */
+  private chatter = 12;
   /** Cycles through each speaker's lines so they don't repeat the same one. */
   private remarks = 0;
   private readonly focusRing = floorRing(0.5, 0.6, PALETTE.focus);
@@ -157,6 +163,15 @@ export class GameEngine {
         0.85,
       ),
     );
+    this.custodian = this.session.custodian
+      ? this.npcViews(
+          new ActorView(buildCustodian(this.kit), this.scene),
+          PALETTE.ghostCustodian,
+          1.3,
+        )
+      : null;
+    this.wetFloors = new WetFloors(this.kit);
+    this.scene.add(this.wetFloors.group);
     this.teachers = this.session.teachers.map((t) =>
       this.npcViews(
         new ActorView(buildTeacher(this.kit, t.def), this.scene),
@@ -237,6 +252,19 @@ export class GameEngine {
       const lines = ['MR. GRAVYYY!', "I'm telling!", 'Ooooh, busted!'];
       this.students[i]?.bubble.say(lines[n() % lines.length]!, '#c62828');
     });
+    events.on('custodian:inspecting', () => {
+      this.custodian?.bubble.say(custodianLine('inspecting', n()), '#33691e');
+    });
+    events.on('custodian:shrug', () => {
+      this.custodian?.bubble.say(custodianLine('shrug', n()), '#33691e');
+    });
+    events.on('custodian:report', ({ about }) => {
+      const line = custodianLine(about === 'player' ? 'reportPlayer' : 'reportFixture', n());
+      this.custodian?.bubble.say(line, '#c62828');
+    });
+    events.on('player:squeak', ({ pos }) => {
+      this.pops.pop('SQUEAK!', '#b3e5fc', 0x81d4fa, toWorld(pos.x), toWorld(pos.y));
+    });
     events.on('student:laughed', ({ studentId }) => {
       const i = this.session.students.findIndex((st) => st.id === studentId);
       this.students[i]?.bubble.say('HA HA HA!', '#ef6c00');
@@ -248,6 +276,18 @@ export class GameEngine {
     const events = this.session.events;
     events.on('noise:made', ({ pos }) => {
       this.pops.pop('PFFT!', '#c5e1a5', 0x9ccc65, toWorld(pos.x), toWorld(pos.y));
+    });
+    // How a pull went, over the fixture.
+    events.on('scrap:collected', ({ fixtureId, quality }) => {
+      const f = this.session.fixtures.find((x) => x.id === fixtureId);
+      if (!f || quality === 'clean') return;
+      const x = toWorld(f.pos.x);
+      const z = toWorld(f.pos.y);
+      if (quality === 'botched') this.pops.pop('BOTCHED', '#ef9a9a', 0xef5350, x, z);
+      else if (quality === 'bonus') {
+        this.pops.pop('BONUS!', '#ffe082', 0xffca28, x, z);
+        this.sparks.emit(x, 0.7, z, 18);
+      } else this.pops.pop('ROUGH', '#cfd8dc', 0x90a4ae, x, z);
     });
     events.on('gadget:used', ({ id, pos }) => {
       const x = toWorld(pos.x);
@@ -385,6 +425,35 @@ export class GameEngine {
         time,
       );
     });
+
+    const c = s.custodian;
+    if (c && this.custodian) {
+      const icon: IconKind =
+        c.mode === 'radio' ? '!' : c.mode === 'suspicious' || c.mode === 'inspect' ? '?' : '';
+      this.syncNpc(
+        this.custodian,
+        {
+          pos: c.pos,
+          facing: c.facing,
+          crouching: c.mode === 'inspect',
+          working: c.mode === 'mop',
+        },
+        s.custodianCone(c),
+        c.mode === 'radio' ? PALETTE.coneChase : PALETTE.coneCustodian,
+        icon,
+        1.45,
+        dt,
+        time,
+      );
+      // He hums and grumbles to himself while he works.
+      this.chatter -= dt;
+      if (this.chatter <= 0) {
+        this.chatter = 18 + Math.random() * 14;
+        if (c.mode === 'mop')
+          this.custodian.bubble.say(custodianLine('mopping', this.remarks++), '#33691e');
+      }
+    }
+    this.wetFloors.update(s);
 
     // Interactions.
     const target = s.currentTarget;

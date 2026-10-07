@@ -592,3 +592,69 @@ describe('ShiftSession: technical fixtures, exploration and the new NPCs', () =>
     expect(s.boss.focus).toBe('report');
   });
 });
+
+describe('ShiftSession: the head custodian and wet floors', () => {
+  // Q: the custodian's closet. A radiator (R) on the north wall.
+  const CUST = [
+    '##############',
+    '#V..R......1.#',
+    '#VP........2.#',
+    '#Z........Q..#',
+    '##############',
+  ];
+  const shift = () =>
+    new ShiftSession({
+      level: testLevel(CUST),
+      characterId: 'dalton',
+      ownedUpgrades: [],
+      day: 1,
+      warnings: 0,
+      seed: 4,
+      durationSeconds: 300,
+    });
+
+  it('finds a freshly stripped fixture and radios Mr. Gravy, who hurries over', () => {
+    const s = shift();
+    const reports = record(s, 'custodian:report');
+    const inspecting = record(s, 'custodian:inspecting');
+    const radiator = s.fixtures[0]!;
+    radiator.rechargeTotal = radiator.rechargeLeft = 200;
+    const c = s.custodian!;
+    c.pos = { x: 6.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
+    c.facing = Math.PI; // looking west, toward the radiator
+    c.mode = 'mop';
+    c.timer = c.jobTimer = 30;
+    s.player.pos = { x: 1.5 * TILE_SIZE, y: 3.5 * TILE_SIZE };
+    s.boss.pos = { x: 11.5 * TILE_SIZE, y: 1.5 * TILE_SIZE };
+    for (let i = 0; i < 600 && reports.length === 0; i++) s.tick(1 / 60, input());
+    expect(inspecting[0]?.fixtureName).toBe('Radiator');
+    expect(reports[0]).toMatchObject({ about: 'fixture', fixtureName: 'Radiator' });
+    expect(s.boss.mode).toBe('investigate');
+    expect(s.boss.focus).toBe('report');
+  });
+
+  it('leaves wet floor behind his mop', () => {
+    const s = shift();
+    for (let i = 0; i < 60 * 40 && s.wet.size === 0; i++) s.tick(1 / 60, input());
+    expect(s.wet.size).toBeGreaterThan(0);
+  });
+
+  it('wet floor squeaks underfoot (Mr. Gravy hears it), but not if you creep', () => {
+    const s = shift();
+    const squeaks = record(s, 'player:squeak');
+    s.custodian!.mode = 'refill';
+    s.custodian!.timer = 100;
+    for (let c = 3; c <= 8; c++) s.wet.set(2 * s.level.cols + c, 30);
+    s.boss.pos = { x: 9.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
+    s.boss.facing = 0;
+    s.boss.mode = 'inspect';
+    s.boss.timer = 100;
+    s.player.pos = { x: 3.5 * TILE_SIZE, y: 2.5 * TILE_SIZE };
+    hold(s, 0.6, input({ moveX: 1, crouch: true }));
+    expect(squeaks).toHaveLength(0);
+    hold(s, 0.3, input({ moveX: 1 }));
+    expect(squeaks.length).toBeGreaterThan(0);
+    expect(s.boss.mode).toBe('investigate');
+    expect(s.boss.focus).toBe('noise');
+  });
+});

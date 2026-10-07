@@ -49,10 +49,25 @@ export function describeEvent<K extends keyof ShiftEvents>(
       const p = payload as ShiftEvents['scrap:collected'];
       const metal = METALS[p.metal].name.toLowerCase();
       const spill = p.overflow > 0 ? ` (bag full — left ${p.overflow.toFixed(2)} behind)` : '';
-      return {
-        text: `+${p.amount.toFixed(2)} ${metal} from ${p.fixtureName}${spill}`,
-        tone: 'info',
-      };
+      switch (p.quality) {
+        case 'botched':
+          return { text: `Botched the ${p.fixtureName}: nothing usable`, tone: 'warn' };
+        case 'rough':
+          return {
+            text: `Rough job: +${p.amount.toFixed(2)} ${metal} from the ${p.fixtureName}${spill}`,
+            tone: 'info',
+          };
+        case 'bonus':
+          return {
+            text: `Bonus find! +${p.amount.toFixed(2)} ${metal} from the ${p.fixtureName}${spill}`,
+            tone: 'good',
+          };
+        default:
+          return {
+            text: `+${p.amount.toFixed(2)} ${metal} from the ${p.fixtureName}${spill}`,
+            tone: 'info',
+          };
+      }
     }
     case 'scrap:sold': {
       const p = payload as ShiftEvents['scrap:sold'];
@@ -89,6 +104,23 @@ export function describeEvent<K extends keyof ShiftEvents>(
     case 'teacher:report': {
       const p = payload as ShiftEvents['teacher:report'];
       return { text: `${p.name} radioed ${boss}!`, tone: 'bad' };
+    }
+    case 'custodian:inspecting': {
+      const p = payload as ShiftEvents['custodian:inspecting'];
+      return {
+        text: `The head custodian is looking at the stripped ${p.fixtureName.toLowerCase()}…`,
+        tone: 'warn',
+      };
+    }
+    case 'custodian:shrug':
+      return { text: 'The head custodian let it go. This time.', tone: 'info' };
+    case 'custodian:report': {
+      const p = payload as ShiftEvents['custodian:report'];
+      const what =
+        p.about === 'player'
+          ? 'about you'
+          : `about the ${p.fixtureName?.toLowerCase() ?? 'damage'}`;
+      return { text: `${p.name} the custodian radioed ${boss} ${what}!`, tone: 'bad' };
     }
     case 'room:discovered': {
       const p = payload as ShiftEvents['room:discovered'];
@@ -127,4 +159,18 @@ export function describeEvent<K extends keyof ShiftEvents>(
     default:
       return null;
   }
+}
+
+/** What the head custodian mutters, by situation; `n` varies the line. */
+const CUSTODIAN_LINES = {
+  inspecting: ['Hmm? Who did this?', 'Now what happened here…', "That's not right."],
+  reportFixture: ['Mr. Gravy? Got a problem here.', 'Somebody gutted this thing!'],
+  reportPlayer: ['HEY! Put that back!', 'Mr. Gravy! Get over here!'],
+  shrug: ['Kids these days…', 'Add it to the list.', 'Not my problem.'],
+  mopping: ['♪ whistling ♪', 'Floor’s wet!', 'Mind the floor!'],
+} as const;
+
+export function custodianLine(kind: keyof typeof CUSTODIAN_LINES, n = 0): string {
+  const lines = CUSTODIAN_LINES[kind];
+  return lines[n % lines.length]!;
 }

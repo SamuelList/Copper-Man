@@ -59,6 +59,9 @@ export interface RigSpec {
   phone?: boolean;
   /** Propeller on top of the cap. */
   propeller?: boolean;
+  mustache?: number;
+  /** A mop in the right hand and a key ring on the belt (head custodian). */
+  mop?: boolean;
   /** Give every mesh its own material (so the player can fade without touching NPCs). */
   unique?: boolean;
 }
@@ -161,6 +164,22 @@ export function buildCharacter(kit: MaterialKit, spec: RigSpec): CharacterModel 
   };
   const AL = arm(-1);
   const AR = arm(1);
+  if (spec.mop) {
+    // Held in the right hand, head trailing on the floor ahead.
+    const grip = pivot(AR.elbow, 0, -0.15, 0);
+    grip.rotation.z = -0.55;
+    part(cyl(0.015, 0.015, 1.05, 6), m(0xa1887f), 0, -0.42, 0, grip);
+    const head = part(cyl(0.11, 0.13, 0.08, 10), m(0xd7d2c3, { roughness: 1 }), 0, -0.95, 0, grip);
+    head.rotation.z = 0.55;
+    part(
+      torus(0.05, 0.012, 6, 12),
+      m(PALETTE.brass, { roughness: 0.3, metalness: 0.8 }),
+      0.05,
+      0.05,
+      -spec.build - 0.04,
+      torso,
+    );
+  }
 
   // Head.
   const head = pivot(torso, 0, 0.43, 0);
@@ -185,6 +204,9 @@ export function buildCharacter(kit: MaterialKit, spec: RigSpec): CharacterModel 
         part(box(0.2, 0.01, 0.04), m(c), 0, 0.29, 0, head).rotation.y = a;
       }
     }
+  }
+  if (spec.mustache !== undefined) {
+    part(box(0.03, 0.03, 0.12), m(spec.mustache), 0.13, 0.07, 0, head);
   }
   if (spec.glasses) {
     const frame = m(0x212121);
@@ -278,4 +300,19 @@ export const buildTeacher = (kit: MaterialKit, def: TeacherDef) =>
     cap: def.outfit.cap,
     tie: def.outfit.tie,
     glasses: def.outfit.glasses,
+  });
+
+/** Earl, the head custodian: grey coveralls, cap, mustache, keys and his mop. */
+export const buildCustodian = (kit: MaterialKit) =>
+  buildCharacter(kit, {
+    scale: 1.02,
+    skin: 0xd9a066,
+    shirt: 0x546e7a,
+    pants: 0x546e7a,
+    shoes: 0x212121,
+    build: 0.17,
+    cap: 0x263238,
+    mustache: 0x5d4037,
+    belt: 0x37474f,
+    mop: true,
   });

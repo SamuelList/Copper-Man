@@ -52,7 +52,8 @@ Landscape is roomiest, but portrait works too. `?touch` forces touch controls on
 - **Between shifts.** The hardware store has three tabs:
   - **Gear:** eight categories of tiered upgrades: boots, tools, bags, keys, gloves (scrap quietly), disguises (carry without looking guilty), radios (hear the boss from further away), and scrapyard deals (sell for more).
   - **Gadgets:** one-use items that carry over until used. Energy drinks give free sprinting. Whoopee cushions are thrown ahead and lure Mr. Gravy to the noise. Bolt cutters open a locked door instantly.
-  - **Skills:** everything you do earns XP (scrapping, selling, doors, waking your coworker, finishing a shift, never getting caught). Each level is a skill point for three trees: **Shadow** (stealth), **Hustle** (speed and capacity), and **Wheeler-Dealer** (money, an extra heart, and talking your way out of one catch per shift).
+  - **Skills:** everything you do earns XP (scrapping, selling, doors, waking your coworker, finishing a shift, never getting caught). Each level is a skill point for four trees: **Shadow** (stealth), **Hustle** (speed and capacity), **Wheeler-Dealer** (money, an extra heart, and talking your way out of one catch per shift), and **Craftsman** (cleaner pulls and bigger finds).
+- **Not every pull is clean.** Each job is botched (nothing usable), rough (part of it), clean, or a bonus find (extra metal). Better tools, the **Craftsman** skill tree, and a worker whose trade matches the fixture all push the odds toward clean pulls and bonus finds; the store shows your current botch and bonus chances. A botched fixture is still stripped, and still evidence.
 - **Scrapping takes time, and fixtures take longer to come back.** Recharge times are double the design board's, so you can't just farm one room; spread out.
 - **Mr. Gravy.** His vision cone is blocked by walls. He only cares if you're **carrying scrap** or **scrapping**: while he sees that, a detection meter fills, and when it's full he chases you.
   - **He plans his own rounds.** He picks rooms to drop in on, weighted toward ones he hasn't checked lately and ones where there's been trouble. He stops in the doorway and looks around. Keep hitting one room and he'll keep coming back to it.
@@ -60,6 +61,10 @@ Landscape is roomiest, but portrait works too. `?touch` forces touch controls on
   - **He's hard to shake.** If he loses you he heads where you were running, not where he last saw you. Then he checks the hiding spots nearby, and sometimes stakes out the exit to your van. He talks while he works, so you can hear him coming.
   - If he catches you: you get a warning, your bag is confiscated, and you're escorted back to the van. Empty-handed, he just tells you to get back to work. He gets faster as the shift goes on and as you sell more.
 - **Teachers** sit between students and the boss. Each one teaches at the front of their room, steps into the hall between lessons, and takes coffee breaks in the lounge. They notice scrapping _and_ full bags, and when they're sure they radio Mr. Gravy, who hurries over.
+- **Earl, the head custodian,** works through a cleaning schedule: room after room, mopping a few spots in each, with trips back to his closet to wring out the mop. He doesn't care about full bags (he carries them all day), but:
+  - He notices **stripped fixtures** as he goes, kneels to look, and may radio Mr. Gravy. He always calls in one that was stripped moments ago, and he gets less forgiving with every one he finds.
+  - He calls in anyone he catches scrapping.
+  - His **wet floors** squeak underfoot; Mr. Gravy hears it if he's close. Crouch to creep across quietly, or wait for them to dry.
 - **Students** have personalities, rolled each shift. Their look gives them away:
 
   | Look                  | Personality   | Behaviour                                                         |
@@ -121,7 +126,7 @@ src/
     content/   characters, fixtures, props, metals, upgrades, consumables, skills, abilities, npcs, balance
     model/     shared types
     systems/   stats, progression, scrapping, bag, economy, warnings, escalation, shop, vision, detection, pathfinding, movement
-    ai/        bossBrain (plans rounds, heat memory, search), studentBrain, teacherBrain, navigation
+    ai/        bossBrain (plans rounds, heat memory, search), studentBrain, teacherBrain, custodianBrain, navigation
     level/     ASCII level format + validator, levels/ (school map)
     session/   ShiftSession + types
   state/       careerStore, shiftStore, appStore, inputMode, virtualInput (touch → game), messages

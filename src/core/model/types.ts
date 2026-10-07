@@ -149,6 +149,12 @@ export interface Modifiers {
   extraHearts?: number;
   /** Catches per shift that end in a talking-to instead of a warning. */
   catchForgiveness?: number;
+  /** Shifts every scrap roll toward a cleaner pull (fewer botches, more bonus finds). */
+  efficiency?: number;
+  /** Rough jobs and bonus finds both yield more. */
+  salvage?: number;
+  /** Above 0: a botched job still yields a rough pull instead of nothing. */
+  noBotch?: number;
 }
 
 export interface UpgradeDef {
@@ -285,6 +291,10 @@ export interface EffectiveStats {
   catchForgiveness: number;
   /** Highest owned tier per gear category (0 = none), for technical requirements. */
   gearTiers: Record<UpgradeCategory, number>;
+  /** Scrap roll shift from gear and skills (the worker's repair adds to it per fixture). */
+  efficiency: number;
+  salvage: number;
+  noBotch: boolean;
 }
 
 export type BagContents = Record<MetalId, number>;

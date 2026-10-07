@@ -14,6 +14,7 @@ import {
   type PatrolPoint,
 } from './bossBrain';
 import { createStudent, rollPersonality, updateStudent } from './studentBrain';
+import { createCustodian, isMopping, updateCustodian } from './custodianBrain';
 import { createTeacher, updateTeacher } from './teacherBrain';
 
 const MAP = [
@@ -378,5 +379,108 @@ describe('teacher brain', () => {
     for (let i = 0; i < 400 && t.mode !== 'check'; i++) updateTeacher(t, tctx(rng));
     expect(t.mode).toBe('check');
     expect(dist(t.pos, center(9, 3))).toBeLessThan(TILE_SIZE);
+  });
+});
+
+describe('custodian brain', () => {
+  const jobs = [
+    {
+      roomId: 'west',
+      spots: [
+        { col: 2, row: 2 },
+        { col: 3, row: 3 },
+      ],
+    },
+    {
+      roomId: 'east',
+      spots: [
+        { col: 9, row: 2 },
+        { col: 9, row: 4 },
+      ],
+    },
+  ];
+  const home = { col: 1, row: 4 };
+  const cctx = (
+    rng: ReturnType<typeof createRng>,
+    overrides: Partial<Parameters<typeof updateCustodian>[1]> = {},
+  ) => ({
+    dt: 0.05,
+    nav,
+    rng,
+    jobs,
+    home,
+    sees: false,
+    rate: 0,
+    playerPos: center(6, 1),
+    spotted: null,
+    ...overrides,
+  });
+
+  it('works his schedule: mops each room in turn, with trips back to his closet', () => {
+    const rng = createRng(21);
+    const c = createCustodian(home, jobs.length, TILE_SIZE, rng);
+    const modes = new Set<string>();
+    const rooms = new Set<number>();
+    run(4000, () => {
+      updateCustodian(c, cctx(rng));
+      modes.add(c.mode);
+      if (c.mode === 'mop') rooms.add(c.order[c.step]!);
+    });
+    expect(modes).toEqual(new Set(['refill', 'walk', 'mop']));
+    expect(rooms.size).toBe(2);
+    expect(isMopping(c) || c.mode === 'walk' || c.mode === 'refill').toBe(true);
+  });
+
+  it('kneels at a freshly stripped fixture and always calls it in', () => {
+    const rng = createRng(22);
+    const c = createCustodian(home, jobs.length, TILE_SIZE, rng);
+    const spotted = { id: 'radiator', pos: center(6, 2), fresh: true };
+    const events: string[] = [];
+    run(400, () => {
+      const e = updateCustodian(c, cctx(rng, { spotted }));
+      if (e) events.push(e.kind === 'report' ? `report:${e.about}` : e.kind);
+    });
+    expect(events).toEqual(['inspecting', 'report:fixture']);
+    expect(c.known.has('radiator')).toBe(true);
+  });
+
+  it('may let an old one slide, but gets suspicious as he finds more', () => {
+    const firstFind = { report: 0, shrug: 0 };
+    for (let seed = 0; seed < 60; seed++) {
+      const rng = createRng(seed);
+      const c = createCustodian(home, jobs.length, TILE_SIZE, rng);
+      const spotted = { id: 'sink', pos: center(5, 3), fresh: false };
+      for (let i = 0; i < 400; i++) {
+        const e = updateCustodian(c, cctx(rng, { spotted }));
+        if (e?.kind === 'report') firstFind.report++;
+        if (e?.kind === 'shrug') firstFind.shrug++;
+        if (e && e.kind !== 'inspecting') break;
+      }
+    }
+    expect(firstFind.report).toBeGreaterThan(10);
+    expect(firstFind.shrug).toBeGreaterThan(10);
+    // By his fourth find he calls in every one.
+    const rng = createRng(3);
+    const c = createCustodian(home, jobs.length, TILE_SIZE, rng);
+    c.finds = 3;
+    let reported = false;
+    run(400, () => {
+      const e = updateCustodian(
+        c,
+        cctx(rng, { spotted: { id: 'old', pos: center(5, 3), fresh: false } }),
+      );
+      reported ||= e?.kind === 'report';
+    });
+    expect(reported).toBe(true);
+  });
+
+  it('calls in someone he watches scrapping', () => {
+    const rng = createRng(23);
+    const c = createCustodian(home, jobs.length, TILE_SIZE, rng);
+    let report = null;
+    run(80, () => {
+      report ??= updateCustodian(c, cctx(rng, { sees: true, rate: SEE_RATE }));
+    });
+    expect(report).toMatchObject({ kind: 'report', about: 'player' });
   });
 });

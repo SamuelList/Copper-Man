@@ -5,7 +5,15 @@ import { createRng } from '../util/rng';
 import { addToBag, bagFree, bagTotal, createBag, emptyBag } from './bag';
 import { saleValue } from './economy';
 import { bossSpeedMult, escalationLevel } from './escalation';
-import { effectiveRepair, rollYield, scrapDuration } from './scrapping';
+import {
+  effectiveRepair,
+  outcomeFor,
+  rollScrapOutcome,
+  rollYield,
+  scrapDuration,
+  scrapEfficiency,
+  scrapOdds,
+} from './scrapping';
 import { canBuyConsumable, canPurchase, discounted } from './shop';
 import { activeUpgrades, deriveStats } from './stats';
 import { addWarning, heartsLeft, recoverHeart } from './warnings';
@@ -168,5 +176,59 @@ describe('escalation', () => {
     const day5 = bossSpeedMult({ timeFraction: 0, securedUnits: 0, day: 5 });
     expect(day1).toBe(1);
     expect(day5).toBeGreaterThan(day1);
+  });
+});
+
+describe('scrap efficiency', () => {
+  const plain = { salvage: 0, noBotch: false };
+
+  it('maps a roll to botched, rough, clean or bonus', () => {
+    expect(outcomeFor(0.05, plain)).toEqual({ quality: 'botched', fraction: 0 });
+    const rough = outcomeFor(0.3, plain);
+    expect(rough.quality).toBe('rough');
+    expect(rough.fraction).toBeGreaterThan(0.4);
+    expect(rough.fraction).toBeLessThan(0.9);
+    expect(outcomeFor(0.6, plain)).toEqual({ quality: 'clean', fraction: 1 });
+    expect(outcomeFor(0.95, plain).quality).toBe('bonus');
+    expect(outcomeFor(0.95, plain).fraction).toBeGreaterThan(1.2);
+  });
+
+  it('better tools and skills shift the odds toward clean pulls and bonus finds', () => {
+    const base = scrapOdds(0, false);
+    const geared = scrapOdds(0.25, false);
+    for (const odds of [base, geared]) {
+      expect(odds.botched + odds.rough + odds.clean + odds.bonus).toBeCloseTo(1);
+    }
+    expect(base.botched).toBeCloseTo(0.12);
+    expect(geared.botched).toBe(0);
+    expect(geared.bonus).toBeGreaterThan(base.bonus * 3);
+    expect(scrapOdds(0, true).botched).toBe(0);
+  });
+
+  it('Master Scrapper never botches, and salvage makes every partial pull bigger', () => {
+    expect(outcomeFor(0.01, { salvage: 0, noBotch: true }).quality).toBe('rough');
+    expect(outcomeFor(0.3, { salvage: 0.2, noBotch: false }).fraction).toBeGreaterThan(
+      outcomeFor(0.3, plain).fraction,
+    );
+  });
+
+  it('folds gear, skills and the worker into efficiency', () => {
+    const s = deriveStats(tomothy, ['ten-in-one-screwdriver', 'pocket-plyers'], ['steady-hands']);
+    expect(s.efficiency).toBeCloseTo(0.1 + 0.06);
+    // A plumber on a fountain beats a jack-of-no-trades on a heater.
+    expect(scrapEfficiency(tomothy, fountain, s)).toBeGreaterThan(
+      scrapEfficiency(dunkin, heater, s),
+    );
+  });
+
+  it('over many jobs, efficiency means more metal per strip', () => {
+    const average = (efficiency: number) => {
+      const rng = createRng(9);
+      let sum = 0;
+      for (let i = 0; i < 2000; i++) sum += rollScrapOutcome(efficiency, plain, rng).fraction;
+      return sum / 2000;
+    };
+    expect(average(0)).toBeLessThan(0.95);
+    expect(average(0.25)).toBeGreaterThan(average(0) + 0.1);
   });
 });

@@ -11,7 +11,7 @@ import type { LevelDef, LevelDoor, LevelFixture, LevelProp, RoomDef, TileKind } 
  *   #  wall              .  floor            =  outdoor floor (rendered by room kind)
  *   D  open doorway      L  locked door      K  security door (Master Key or bolt cutters)
  *   V  van (deposit)     P  player spawn     S  student spawn     E  teacher spawn
- *   Z  sleepy-coworker hiding spot
+ *   Q  head custodian's closet (his spawn)   Z  sleepy-coworker hiding spot
  *   1-9  boss patrol waypoint markers (ordered by `bossRoute`)
  *   any fixture glyph from FIXTURES (C F H A R T M l k …) — scrappable
  *   any prop glyph from PROPS (O B h t b p q n r c …) — furniture: tall blocks sight, low is cover
@@ -41,6 +41,7 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
   const vanTiles: TilePos[] = [];
   const studentSpawns: TilePos[] = [];
   const teacherSpawns: TilePos[] = [];
+  let custodianSpawn: TilePos | null = null;
   const coworkerSpots: TilePos[] = [];
   const markers = new Map<string, TilePos>();
   let playerSpawn: TilePos | null = null;
@@ -66,6 +67,7 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
       } else if (ch === 'P') playerSpawn = tile;
       else if (ch === 'S') studentSpawns.push(tile);
       else if (ch === 'E') teacherSpawns.push(tile);
+      else if (ch === 'Q') custodianSpawn = tile;
       else if (ch === 'Z') coworkerSpots.push(tile);
       else if (/[1-9]/.test(ch)) {
         if (markers.has(ch)) throw new Error(`Level "${src.id}" has duplicate marker "${ch}"`);
@@ -109,6 +111,7 @@ export function parseAsciiLevel(src: AsciiLevelSource): LevelDef {
     bossRoute,
     studentSpawns,
     teacherSpawns,
+    custodianSpawn,
     coworkerSpots,
   };
 }

@@ -59,6 +59,9 @@ export function combineModifiers(list: readonly Modifiers[]): Required<Modifiers
     'shiftBonusSeconds',
     'extraHearts',
     'catchForgiveness',
+    'efficiency',
+    'salvage',
+    'noBotch',
   ] as (keyof Modifiers)[]) {
     out[key] = MULTIPLIED.has(key) ? 1 : 0;
   }
@@ -106,6 +109,9 @@ export function deriveStats(
     shiftSeconds: BALANCE.shift.durationSeconds + m.shiftBonusSeconds,
     maxWarnings: BALANCE.warnings.max + m.extraHearts,
     catchForgiveness: m.catchForgiveness,
+    efficiency: m.efficiency,
+    salvage: m.salvage,
+    noBotch: m.noBotch > 0,
     gearTiers: Object.fromEntries(
       Object.keys(UPGRADE_CATEGORIES).map((c) => [c, active[c as UpgradeCategory]?.tier ?? 0]),
     ) as Record<UpgradeCategory, number>,

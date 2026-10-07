@@ -307,3 +307,34 @@ function buildSecurityDoor(kit: MaterialKit): { root: THREE.Group; leaf: THREE.G
   part(rbox(0.05, 0.05, 0.3, 0.02), chrome, 0.78, 0.75, 0, leaf);
   return { root, leaf };
 }
+
+/** The yellow "wet floor" A-frame the custodian leaves by his mopping. */
+export function buildWetFloorSign(kit: MaterialKit): THREE.Group {
+  const g = new THREE.Group();
+  const yellow = kit.get(0xfdd835, { roughness: 0.5 });
+  const label = canvasTexture('wet-floor', 64, 64, (ctx) => {
+    ctx.fillStyle = '#fdd835';
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = '#111';
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('CAUTION', 32, 18);
+    ctx.fillText('WET', 32, 38);
+    ctx.fillText('FLOOR', 32, 56);
+  });
+  for (const side of [-1, 1]) {
+    const panel = part(rbox(0.3, 0.5, 0.02, 0.01), yellow, 0, 0.25, side * 0.08, g);
+    panel.rotation.x = side * 0.3;
+    const face = part(
+      plane(0.24, 0.24),
+      kit.get(0xffffff, { map: label }),
+      0,
+      0.28,
+      side * 0.095,
+      g,
+    );
+    face.rotation.set(side * 0.3, side > 0 ? 0 : Math.PI, 0);
+    face.castShadow = false;
+  }
+  return g;
+}

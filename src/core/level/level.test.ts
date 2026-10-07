@@ -106,6 +106,8 @@ describe('school level', () => {
     expect(SCHOOL_LEVEL.cols * SCHOOL_LEVEL.rows).toBeGreaterThanOrEqual(1980 * 2);
     expect(SCHOOL_LEVEL.teacherSpawns.length).toBeGreaterThanOrEqual(5);
     expect(SCHOOL_LEVEL.studentSpawns.length).toBeGreaterThanOrEqual(15);
+    const closet = SCHOOL_LEVEL.custodianSpawn!;
+    expect(roomAt(SCHOOL_LEVEL, closet.col, closet.row)?.id).toBe('janitor');
   });
 
   it('puts the hardest prizes far from the van, behind security doors', () => {

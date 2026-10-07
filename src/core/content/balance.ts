@@ -49,6 +49,22 @@ export const BALANCE = {
     /** Speed gained/lost per point of effective repair away from the baseline. */
     ratePerRepairPoint: 0.3,
     minRate: 0.4,
+    /**
+     * Not every pull is clean. A roll in [0, 1), shifted up by efficiency, lands in a band:
+     * botched (nothing), rough (part of the yield), clean (all of it) or a bonus find (extra).
+     */
+    outcome: {
+      botchBelow: 0.12,
+      roughBelow: 0.45,
+      cleanBelow: 0.9,
+      /** Share of the yield a rough job gets, worst to best. */
+      rough: { min: 0.4, max: 0.9 },
+      /** Multiplier a bonus find gets, smallest to biggest. */
+      bonus: { min: 1.2, max: 1.5 },
+      /** Efficiency per point of effective repair above (or below) the baseline. */
+      perRepairPoint: 0.04,
+      maxEfficiency: 0.4,
+    },
   },
   doors: {
     baseUnlockSeconds: 3,
@@ -126,6 +142,41 @@ export const BALANCE = {
     roamTiles: 4,
     /** Dozing students sleep and wake in cycles about this long. */
     dozeCycleSeconds: 12,
+  },
+  /**
+   * The head custodian works through a cleaning schedule. He doesn't care about full bags (he
+   * carries them all day), but he notices stripped fixtures and someone scrapping.
+   */
+  custodian: {
+    walkSpeed: 58,
+    /** Pushing a mop between spots. */
+    mopSpeed: 30,
+    visionRange: TILE_SIZE * 5,
+    fovDegrees: 100,
+    /** He's busy: slow to notice someone scrapping. */
+    fillRate: 0.5,
+    jobSeconds: { min: 14, max: 22 },
+    mopSpotSeconds: { min: 1.5, max: 3 },
+    /** Back to his closet to wring out the mop every few jobs. */
+    refillEvery: 3,
+    refillSeconds: 6,
+    /** He spots stripped fixtures within this many tiles, then kneels to look this long. */
+    spotTiles: 4.5,
+    inspectSeconds: 2.5,
+    radioSeconds: 2.5,
+    reportCooldownSeconds: 10,
+    /** Chance he calls a stripped fixture in, rising with each one he finds this shift. */
+    reportChance: 0.4,
+    reportChancePerFind: 0.25,
+    /** Stripped this recently (share of its recharge still to go): he always calls it in. */
+    freshFraction: 0.75,
+    /** Mopping leaves wet floor behind him for a while. */
+    wetSeconds: 25,
+    wetEverySeconds: 1.2,
+    maxWetTiles: 16,
+    /** Walking on a wet floor squeaks; Mr. Gravy hears it this far (half through walls). */
+    squeakTiles: 6,
+    squeakCooldownSeconds: 1.2,
   },
   /** Teachers sit between students and the boss: they notice more, and radio Mr. Gravy. */
   teacher: {

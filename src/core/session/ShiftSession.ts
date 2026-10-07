@@ -15,6 +15,14 @@ import {
   updateStudent,
   type StudentState,
 } from '../ai/studentBrain';
+import {
+  createCustodian,
+  isMopping,
+  updateCustodian,
+  type CleaningJob,
+  type CustodianState,
+  type Sighting,
+} from '../ai/custodianBrain';
 import { createTeacher, updateTeacher, type TeacherState } from '../ai/teacherBrain';
 import { ABILITIES } from '../content/abilities';
 import { BALANCE, TILE_SIZE } from '../content/balance';
@@ -22,7 +30,7 @@ import { CHARACTERS } from '../content/characters';
 import { CONSUMABLES } from '../content/consumables';
 import { FIXTURES } from '../content/fixtures';
 import { emptyContents, METAL_IDS } from '../content/metals';
-import { NPCS, TEACHERS } from '../content/npcs';
+import { CUSTODIAN, NPCS, TEACHERS } from '../content/npcs';
 import { Emitter } from '../events/emitter';
 import { lightAt, roomAt } from '../level/asciiLevel';
 import { boxCenter, distanceToBox, tileBox, tileCenter, worldToTile } from '../level/grid';
@@ -42,7 +50,13 @@ import { addToBag, bagFree, bagTotal, createBag, emptyBag } from '../systems/bag
 import { saleValue } from '../systems/economy';
 import { bossSpeedMult, escalationLevel } from '../systems/escalation';
 import { steerMove, type Detour } from '../systems/movement';
-import { rollRecharge, rollYield, scrapDuration } from '../systems/scrapping';
+import {
+  rollRecharge,
+  rollScrapOutcome,
+  rollYield,
+  scrapDuration,
+  scrapEfficiency,
+} from '../systems/scrapping';
 import { deriveStats } from '../systems/stats';
 import { detectionRate, effectiveRange } from '../systems/detection';
 import { ExploredMap, tilesInView } from '../systems/exploration';
@@ -59,7 +73,7 @@ import { addWarning, recoverHeart } from '../systems/warnings';
 import { angleTo, deg, dist, round2 } from '../util/math';
 import { createRng, type Rng } from '../util/rng';
 import { LevelGrid } from './levelGrid';
-import { guardSpots, hideSpots, patrolPoints, teacherPosts } from './npcPlaces';
+import { cleaningJobs, guardSpots, hideSpots, patrolPoints, teacherPosts } from './npcPlaces';
 import type {
   CoworkerState,
   DoorState,
@@ -85,6 +99,7 @@ const P = BALANCE.player;
 const V = BALANCE.npc.vision;
 const B = BALANCE.boss;
 const TCH = BALANCE.teacher;
+const CUST = BALANCE.custodian;
 
 /**
  * Authoritative simulation of one work shift. Pure TypeScript: the renderer feeds it input and
@@ -104,6 +119,10 @@ export class ShiftSession {
   readonly boss: BossState;
   readonly students: StudentState[];
   readonly teachers: TeacherState[];
+  /** The head custodian (null on levels without a custodian's closet). */
+  readonly custodian: CustodianState | null;
+  /** Freshly mopped floor: tile index → seconds until dry. Walking on it squeaks. */
+  readonly wet = new Map<number, number>();
   readonly fixtures: FixtureState[];
   readonly doors: DoorState[];
   readonly coworker: CoworkerState;
@@ -145,6 +164,11 @@ export class ShiftSession {
   private evidenceTimer = 0;
   private hearCooldown = 0;
   private readonly teacherNav: NavContext;
+  private readonly jobs: CleaningJob[];
+  private custodianLook = 0;
+  private custodianSight: Sighting | null = null;
+  private wetTimer = 0;
+  private squeakCooldown = 0;
   private tally = {
     earned: 0,
     unitsSold: 0,
@@ -215,6 +239,9 @@ export class ShiftSession {
       const area = room?.rect ?? { col: s.col - 2, row: s.row - 2, w: 5, h: 5 };
       return createStudent(`student-${i}`, s, area, TILE_SIZE, this.rng, rollPersonality(this.rng));
     });
+    this.jobs = cleaningJobs(this.level);
+    const closet = this.level.custodianSpawn;
+    this.custodian = closet ? createCustodian(closet, this.jobs.length, TILE_SIZE, this.rng) : null;
     this.teachers = this.level.teacherSpawns.map((spawnTile, i) => {
       const def = TEACHERS.all[i % TEACHERS.all.length]!;
       const posts = teacherPosts(this.level, spawnTile);
@@ -331,7 +358,9 @@ export class ShiftSession {
     this.updateSuspicion();
     this.updateExploration(dt);
     const students = this.updateStudents(dt);
-    const report = this.updateTeachers(dt, students.tips) ?? students.report;
+    const report =
+      this.updateTeachers(dt, students.tips) ?? this.updateCustodian(dt) ?? students.report;
+    this.updateWetFloors(dt);
     this.updateBoss(dt, report);
     if (this.status !== 'running') return;
     this.updateEscalation();
@@ -589,7 +618,13 @@ export class ShiftSession {
   private completeScrap(fixtureId: string) {
     const f = this.fixtures.find((x) => x.id === fixtureId);
     if (!f) return;
-    const amount = rollYield(f.def, this.rng);
+    // How well the job went: tools, skills and know-how make clean pulls and bonus finds likelier.
+    const outcome = rollScrapOutcome(
+      scrapEfficiency(this.character, f.def, this.stats),
+      this.stats,
+      this.rng,
+    );
+    const amount = round2(rollYield(f.def, this.rng) * outcome.fraction);
     const result = addToBag(this.bag, f.def.metal, amount);
     this.bag = result.bag;
     this.tally.unitsCollected = round2(this.tally.unitsCollected + result.added);
@@ -601,6 +636,8 @@ export class ShiftSession {
       metal: f.def.metal,
       amount: result.added,
       overflow: result.overflow,
+      quality: outcome.quality,
+      fraction: outcome.fraction,
     });
     this.gainXp(BALANCE.xp.perScrap, 'Scrapping');
   }
@@ -643,6 +680,7 @@ export class ShiftSession {
       f.rechargeLeft = Math.max(0, f.rechargeLeft - dt);
       if (f.rechargeLeft === 0) {
         f.noticed = false;
+        this.custodian?.known.delete(f.id);
         this.events.emit('fixture:recharged', { fixtureId: f.id });
       }
     }
@@ -825,6 +863,113 @@ export class ShiftSession {
       }
     }
     return report;
+  }
+
+  custodianCone(c: CustodianState): ViewCone {
+    return { pos: c.pos, facing: c.facing, fov: deg(CUST.fovDegrees), range: CUST.visionRange };
+  }
+
+  /**
+   * The head custodian works his schedule. He notices someone scrapping, and stripped
+   * fixtures; when he calls one in, Mr. Gravy gets a report.
+   */
+  private updateCustodian(dt: number): Stimulus | null {
+    const c = this.custodian;
+    if (!c) return null;
+    const seen = this.suspicion.scrapping
+      ? this.perceive(this.custodianCone(c), CUST.fillRate, { carrying: false, scrapping: true })
+      : { sees: false, rate: 0 };
+    const event = updateCustodian(c, {
+      dt,
+      nav: this.teacherNav,
+      rng: this.rng,
+      jobs: this.jobs,
+      home: this.level.custodianSpawn!,
+      sees: seen.sees,
+      rate: seen.rate,
+      decay: V.decayRate * this.stats.decayMult,
+      playerPos: this.player.pos,
+      spotted: this.custodianSpots(c, dt),
+    });
+    if (!event) return null;
+    const fixtureName = this.fixtures.find((f) => f.id === event.fixtureId)?.def.name ?? 'fixture';
+    switch (event.kind) {
+      case 'inspecting':
+        this.events.emit('custodian:inspecting', { fixtureName, pos: { ...c.pos } });
+        return null;
+      case 'shrug':
+        this.events.emit('custodian:shrug', { fixtureName, pos: { ...c.pos } });
+        return null;
+      case 'report':
+        this.events.emit('custodian:report', {
+          name: CUSTODIAN.name,
+          about: event.about,
+          fixtureName: event.about === 'fixture' ? fixtureName : undefined,
+          pos: { ...event.pos },
+        });
+        return { kind: 'report', pos: event.pos };
+    }
+  }
+
+  /** A stripped fixture in the custodian's view that he hasn't looked at yet (sampled). */
+  private custodianSpots(c: CustodianState, dt: number): Sighting | null {
+    this.custodianLook -= dt;
+    if (this.custodianLook > 0) return this.custodianSight;
+    this.custodianLook = 0.25;
+    this.custodianSight = null;
+    const cone = this.custodianCone(c);
+    const range = CUST.spotTiles * TILE_SIZE;
+    for (const f of this.fixtures) {
+      if (f.rechargeLeft <= 0 || c.known.has(f.id)) continue;
+      if (dist(cone.pos, f.pos) > range || !inCone({ ...cone, range }, f.pos)) continue;
+      if (!hasLineOfSight(this.grid, cone.pos, f.pos)) continue;
+      this.custodianSight = {
+        id: f.id,
+        pos: { ...f.pos },
+        fresh: f.rechargeLeft / f.rechargeTotal >= CUST.freshFraction,
+      };
+      break;
+    }
+    return this.custodianSight;
+  }
+
+  /**
+   * Mopping leaves wet floor behind the custodian; it dries after a while. Walking on it
+   * (unless you're creeping) squeaks, and Mr. Gravy hears that if he's close.
+   */
+  private updateWetFloors(dt: number) {
+    for (const [k, left] of this.wet) {
+      if (left <= dt) this.wet.delete(k);
+      else this.wet.set(k, left - dt);
+    }
+    const c = this.custodian;
+    this.wetTimer -= dt;
+    if (c && isMopping(c) && this.wetTimer <= 0) {
+      this.wetTimer = CUST.wetEverySeconds;
+      const t = worldToTile(TILE_SIZE, c.pos.x, c.pos.y);
+      const k = t.row * this.level.cols + t.col;
+      this.wet.delete(k);
+      this.wet.set(k, CUST.wetSeconds);
+      // Oldest patch dries first if there's too much.
+      if (this.wet.size > CUST.maxWetTiles) this.wet.delete(this.wet.keys().next().value!);
+    }
+
+    this.squeakCooldown = Math.max(0, this.squeakCooldown - dt);
+    const p = this.player;
+    if (!p.moving || p.crouching || this.squeakCooldown > 0) return;
+    const t = worldToTile(TILE_SIZE, p.pos.x, p.pos.y);
+    if (!this.wet.has(t.row * this.level.cols + t.col)) return;
+    this.squeakCooldown = CUST.squeakCooldownSeconds;
+    this.events.emit('player:squeak', { pos: { ...p.pos } });
+    const through = hasLineOfSight(this.grid, this.boss.pos, p.pos) ? 1 : 0.5;
+    if (dist(this.boss.pos, p.pos) <= CUST.squeakTiles * TILE_SIZE * through) {
+      this.pendingNoise = { ...p.pos };
+    }
+  }
+
+  /** Is this tile freshly mopped? */
+  isWet(col: number, row: number) {
+    return this.wet.has(row * this.level.cols + col);
   }
 
   /** Sprinting is loud: he hears it nearby (less through walls). */
@@ -1010,6 +1155,7 @@ export class ShiftSession {
       bossLevel,
       ...this.students.map((s) => s.detection),
       ...this.teachers.map((t) => (t.mode === 'confront' ? 1 : t.detection)),
+      this.custodian?.detection ?? 0,
     );
   }
 

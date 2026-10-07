@@ -4,6 +4,7 @@ import { SKILL_TREES, skillsInTree } from '@core/content/skills';
 import { UPGRADE_CATEGORIES, upgradesInCategory } from '@core/content/upgrades';
 import type { SkillDef, UpgradeCategory } from '@core/model/types';
 import { canLearn, xpToNext } from '@core/systems/progression';
+import { scrapOdds } from '@core/systems/scrapping';
 import { canBuyConsumable, canPurchase, discounted, type PurchaseCheck } from '@core/systems/shop';
 import { useAppStore } from '@state/appStore';
 import { careerStats, useCareerStore } from '@state/careerStore';
@@ -46,6 +47,7 @@ export function ShopScreen() {
   }, [character, go]);
   if (!character) return null;
   const stats = careerStats(career);
+  const odds = scrapOdds(stats.efficiency, stats.noBotch);
 
   return (
     <main className={[styles.screen, styles.hub].join(' ')}>
@@ -83,6 +85,10 @@ export function ShopScreen() {
             <strong>{pct(stats.saleMult)}</strong> sale price
           </span>
         )}
+        <span title="Chance of a botched job and of a bonus find (before your worker's know-how)">
+          <strong>{Math.round(odds.botched * 100)}%</strong> botch ·{' '}
+          <strong>{Math.round(odds.bonus * 100)}%</strong> bonus
+        </span>
         {stats.shopDiscount > 0 && (
           <span>
             <strong>-{Math.round(stats.shopDiscount * 100)}%</strong> prices

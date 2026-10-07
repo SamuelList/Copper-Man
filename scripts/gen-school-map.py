@@ -231,6 +231,7 @@ put('h', 58, 3)
 put('A', 56, 1)
 put('Z', 55, 6)
 put('n', 51, 7)
+put('Q', 53, 4)  # the head custodian's base
 # Science lab: benches with gas taps.
 for (c, r) in [(36, 14), (39, 14), (42, 14), (36, 16), (39, 16), (42, 16)]:
     put('g', c, r)

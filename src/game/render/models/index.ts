@@ -22,4 +22,5 @@ export {
   buildLockedDoor,
   buildTree,
   buildVan,
+  buildWetFloorSign,
 } from './setPieces';

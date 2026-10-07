@@ -2,7 +2,7 @@ import type { SkillDef, SkillTreeDef } from '../model/types';
 import { createRegistry } from './registry';
 
 /**
- * Three skill trees. Each opens with one root skill, forks into two choices, rejoins, and ends
+ * Four skill trees. Each opens with one root skill, forks into two choices, rejoins, and ends
  * in a 2-point capstone. A skill unlocks once ANY of its `requires` is owned.
  */
 export const SKILL_TREES = createRegistry<SkillTreeDef>('skill tree', [
@@ -23,6 +23,12 @@ export const SKILL_TREES = createRegistry<SkillTreeDef>('skill tree', [
     name: 'Wheeler-Dealer',
     blurb: 'Money and favours',
     color: 0x66bb6a,
+  },
+  {
+    id: 'craft',
+    name: 'Craftsman',
+    blurb: 'Cleaner pulls, bigger finds',
+    color: 0x4fc3f7,
   },
 ]);
 
@@ -179,6 +185,57 @@ export const SKILLS = createRegistry<SkillDef>('skill', [
     cost: 2,
     requires: ['union-rep'],
     effect: { catchForgiveness: 1 },
+  },
+  // Craftsman
+  {
+    id: 'steady-hands',
+    tree: 'craft',
+    tier: 1,
+    name: 'Steady Hands',
+    description: 'Fewer botched and rough jobs.',
+    cost: 1,
+    requires: [],
+    effect: { efficiency: 0.06 },
+  },
+  {
+    id: 'salvager',
+    tree: 'craft',
+    tier: 2,
+    name: 'Salvager',
+    description: 'Rough jobs and bonus finds both yield more.',
+    cost: 1,
+    requires: ['steady-hands'],
+    effect: { salvage: 0.2 },
+  },
+  {
+    id: 'feel-for-it',
+    tree: 'craft',
+    tier: 2,
+    name: 'Feel for It',
+    description: 'Cleaner pulls again, and a little faster.',
+    cost: 1,
+    requires: ['steady-hands'],
+    effect: { efficiency: 0.06, scrapRateMult: 1.05 },
+  },
+  {
+    id: 'old-pro',
+    tree: 'craft',
+    tier: 3,
+    name: 'Old Pro',
+    description: 'Bonus finds come up far more often.',
+    cost: 1,
+    requires: ['salvager', 'feel-for-it'],
+    effect: { efficiency: 0.08 },
+  },
+  {
+    id: 'master-scrapper',
+    tree: 'craft',
+    tier: 4,
+    name: 'Master Scrapper',
+    description: 'Never come away empty-handed again, and every pull yields a bit more.',
+    cost: 2,
+    requires: ['old-pro'],
+    effect: { noBotch: 1, salvage: 0.15 },
   },
 ]);
 

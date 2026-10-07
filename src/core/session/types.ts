@@ -1,5 +1,6 @@
 import type { BossMode, BossRemark } from '../ai/bossBrain';
 import type { LevelDef } from '../level/types';
+import type { ScrapQuality } from '../systems/scrapping';
 import type { Bag, BagContents, Box, FixtureDef, MetalId, TilePos, Vec2 } from '../model/types';
 
 export interface ShiftConfig {
@@ -139,6 +140,9 @@ export interface ShiftEvents {
     metal: MetalId;
     amount: number;
     overflow: number;
+    /** How the pull went (botched jobs yield nothing but still leave the fixture stripped). */
+    quality: ScrapQuality;
+    fraction: number;
   };
   'scrap:sold': { units: number; value: number; contents: BagContents };
   'fixture:recharged': { fixtureId: string };
@@ -154,6 +158,19 @@ export interface ShiftEvents {
   /** Something Mr. Gravy says out loud; `detail` names what he found. */
   'boss:remark': { remark: BossRemark; pos: Vec2; detail?: string };
   'room:discovered': { roomId: string; name: string };
+  /** The head custodian is kneeling at a stripped fixture. */
+  'custodian:inspecting': { fixtureName: string; pos: Vec2 };
+  /** He looked, grumbled, and let it go. */
+  'custodian:shrug': { fixtureName: string; pos: Vec2 };
+  /** He radioed Mr. Gravy about a stripped fixture or about you. */
+  'custodian:report': {
+    name: string;
+    about: 'fixture' | 'player';
+    fixtureName?: string;
+    pos: Vec2;
+  };
+  /** Walked on a wet floor. */
+  'player:squeak': { pos: Vec2 };
   'coworker:found': { warnings: number };
   'ability:activated': { abilityId: string };
   'ability:ready': { abilityId: string };

@@ -7,6 +7,9 @@ export const NPCS = {
   student: { id: 'student', name: 'Student', speed: 1, awareness: 1 },
 } as const satisfies Record<string, NpcDef>;
 
+/** The head custodian (see BALANCE.custodian and ai/custodianBrain). */
+export const CUSTODIAN = { name: 'Earl', title: 'Head Custodian' } as const;
+
 export const COWORKER = {
   name: 'Sleepy Coworker',
   flavor: [

@@ -76,5 +76,7 @@ export interface LevelDef {
   studentSpawns: TilePos[];
   /** Each teacher's starting spot; the room it's in becomes their classroom. */
   teacherSpawns: TilePos[];
+  /** Where the head custodian keeps his mop and starts the shift (null: no custodian). */
+  custodianSpawn: TilePos | null;
   coworkerSpots: TilePos[];
 }

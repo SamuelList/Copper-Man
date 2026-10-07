@@ -1,7 +1,8 @@
 import type { GuardSpot, PatrolPoint } from '../ai/bossBrain';
+import type { CleaningJob } from '../ai/custodianBrain';
 import type { Post } from '../ai/teacherBrain';
 import { isWalkableTile, roomAt, tileAt } from '../level/asciiLevel';
-import type { LevelDef, RoomDef } from '../level/types';
+import type { LevelDef, RoomDef, RoomKind } from '../level/types';
 import type { TilePos } from '../model/types';
 
 /**
@@ -162,4 +163,38 @@ export function teacherPosts(
     if (tile) lounge = { tile, look: Math.PI / 2 };
   }
   return { front, hall, lounge };
+}
+
+/** Rooms the head custodian keeps clean (not the mechanical rooms or closets). */
+const CLEANED: ReadonlySet<RoomKind> = new Set([
+  'hallway',
+  'classroom',
+  'restroom',
+  'lounge',
+  'office',
+  'library',
+  'lab',
+  'gym',
+  'cafeteria',
+  'kitchen',
+]);
+
+/** The head custodian's rooms, each with three spots spread along it to mop. */
+export function cleaningJobs(level: LevelDef): CleaningJob[] {
+  const passable = walkable(level);
+  const jobs: CleaningJob[] = [];
+  for (const room of level.rooms) {
+    if (!CLEANED.has(room.kind)) continue;
+    const { col, row, w, h } = room.rect;
+    const spots: TilePos[] = [];
+    for (const t of [0.2, 0.5, 0.8]) {
+      const tile =
+        w >= h
+          ? nearestPassable(passable, room.rect, col + (w - 1) * t, row + (h - 1) / 2)
+          : nearestPassable(passable, room.rect, col + (w - 1) / 2, row + (h - 1) * t);
+      if (tile && !spots.some((s) => s.col === tile.col && s.row === tile.row)) spots.push(tile);
+    }
+    if (spots.length > 0) jobs.push({ roomId: room.id, spots });
+  }
+  return jobs;
 }
