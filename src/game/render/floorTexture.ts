@@ -240,6 +240,37 @@ export interface FloorLayers {
  */
 export function createFloorLayers(size: number, anisotropy: number): FloorLayers {
   const count = FLOOR_KINDS.length;
+  const { albedo, detail } = paintedLayers(size);
+  const array = (data: Uint8Array, colorSpace: THREE.ColorSpace) => {
+    const texture = new THREE.DataArrayTexture(data, size, size, count);
+    texture.format = THREE.RGBAFormat;
+    texture.colorSpace = colorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = anisotropy;
+    texture.needsUpdate = true;
+    return texture;
+  };
+  return {
+    albedo: array(albedo, THREE.SRGBColorSpace),
+    detail: array(detail, THREE.NoColorSpace),
+  };
+}
+
+/** The painted pixels, per layer size. They never change, so every shift after the first reuses them. */
+const painted = new Map<number, { albedo: Uint8Array; detail: Uint8Array }>();
+
+function paintedLayers(size: number) {
+  let layers = painted.get(size);
+  if (!layers) painted.set(size, (layers = paintFloorLayers(size)));
+  return layers;
+}
+
+function paintFloorLayers(size: number) {
+  const count = FLOOR_KINDS.length;
   const albedo = new Uint8Array(size * size * 4 * count);
   const detail = new Uint8Array(size * size * 4 * count);
   const height = new Float32Array(size * size);
@@ -296,24 +327,7 @@ export function createFloorLayers(size: number, anisotropy: number): FloorLayers
       }
     }
   });
-
-  const array = (data: Uint8Array, colorSpace: THREE.ColorSpace) => {
-    const texture = new THREE.DataArrayTexture(data, size, size, count);
-    texture.format = THREE.RGBAFormat;
-    texture.colorSpace = colorSpace;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.generateMipmaps = true;
-    texture.anisotropy = anisotropy;
-    texture.needsUpdate = true;
-    return texture;
-  };
-  return {
-    albedo: array(albedo, THREE.SRGBColorSpace),
-    detail: array(detail, THREE.NoColorSpace),
-  };
+  return { albedo, detail };
 }
 
 /** One texel per tile: which floor layer it uses. */

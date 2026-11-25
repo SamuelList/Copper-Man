@@ -9,6 +9,7 @@ import { bake, batchStatic } from './batching';
 import { mountRotation, toWorld } from './coords';
 import { createFloorMaterial, wallDetailTexture } from './floorTexture';
 import { buildInterior } from './interior';
+import type { IsoCamera } from './isoCamera';
 import { LightBaker } from './lightBaker';
 import type { TileVisibility } from './occlusion';
 import { GLOW, type MaterialKit } from './materials';
@@ -27,6 +28,7 @@ import {
 } from './models';
 import { buildOutdoors, HORIZON } from './outdoors';
 import { PALETTE } from './palette';
+import { fitShadowBox, shadowMapSize, type ShadowBox } from './shadowFit';
 
 export const WALL_HEIGHT = 1.6;
 const WALL_CUT_HEIGHT = 0.22;
@@ -39,9 +41,20 @@ const CUT_HALF_WIDTH = 0.4;
  * camera at the true isometric angle (tan 35.26° = 1/√2), plus a little slack.
  */
 const CUT_REACH = WALL_HEIGHT * Math.SQRT2 + 0.3;
-/** Half-size of the area around the view that gets real-time shadows (tiles). */
+/**
+ * Half-size of the area around the view that gets real-time shadows (tiles), where nothing
+ * better is known about what's on screen (first person).
+ */
 const SHADOW_EXTENT = 14;
 const SHADOW_MAP = 2048;
+const SHADOW_SQUARE: ShadowBox = {
+  left: -SHADOW_EXTENT,
+  right: SHADOW_EXTENT,
+  bottom: -SHADOW_EXTENT,
+  top: SHADOW_EXTENT,
+};
+/** Room left around what the view shows, for the soft edge of a shadow and the texel snap. */
+const SHADOW_MARGIN = 0.75;
 /** Direction the sun shines from (relative to what it lights). */
 const SUN_OFFSET = new THREE.Vector3(-18, 34, -22);
 /**
@@ -237,8 +250,17 @@ export interface World {
    * if any of it is in view). Pass null to draw everything again.
    */
   cull(seen: TileVisibility | null): void;
-  /** Real-time shadow map size; 0 turns real-time shadows off. */
+  /**
+   * How sharp real-time shadows are, as the size of a square map over the standard area; 0
+   * turns them off.
+   */
   setShadows(size: number): void;
+  /**
+   * Shadows are only worked out for the patch of the world a view shows, from the ground to
+   * the top of the walls (the crown of a tree outside simply goes without): pass the top-down
+   * camera, which knows its own, or null for the standard area around the focus.
+   */
+  showShadows(view: Pick<IsoCamera, 'footprint'> | null): void;
   /** Free what the world owns beyond the scene's own meshes and materials. */
   dispose(): void;
 }
@@ -416,16 +438,21 @@ export function buildWorld(
   scene.add(standIn);
   const sun = new THREE.DirectionalLight(0xfff0dc, 2.2);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
-  Object.assign(sun.shadow.camera, {
-    left: -SHADOW_EXTENT,
-    right: SHADOW_EXTENT,
-    top: SHADOW_EXTENT,
-    bottom: -SHADOW_EXTENT,
-    near: 1,
-    far: 100,
-  });
-  sun.shadow.camera.updateProjectionMatrix();
+  Object.assign(sun.shadow.camera, { near: 1, far: 100 });
+  /** How sharp the shadows are: the size of a square map over the standard area. */
+  let shadowSize = SHADOW_MAP;
+  /** The part of the sun's view that gets shadows: only what the camera can show. */
+  const fitShadows = (box: ShadowBox) => {
+    Object.assign(sun.shadow.camera, box);
+    sun.shadow.camera.updateProjectionMatrix();
+    const { x, y } = shadowMapSize(box, shadowSize, SHADOW_EXTENT);
+    if (x === sun.shadow.mapSize.x && y === sun.shadow.mapSize.y) return;
+    // A map of the wrong size gives its memory back straight away.
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+    sun.shadow.mapSize.set(x, y);
+  };
+  fitShadows(SHADOW_SQUARE);
   // The soft filter reads a few texels to every side; this much bias keeps a lit floor clear
   // of its own shadow across that spread.
   sun.shadow.bias = -0.0007;
@@ -453,7 +480,7 @@ export function buildWorld(
     reflect: (texture, matrix, strength) => floorSurface.reflect(texture, matrix, strength),
     update(focusX, focusZ, time) {
       // Snap the shadow area to its texel grid so shadows don't shimmer as the view moves.
-      const texel = (SHADOW_EXTENT * 2) / sun.shadow.mapSize.x;
+      const texel = (SHADOW_EXTENT * 2) / shadowSize;
       const x = Math.round(focusX / texel) * texel;
       const z = Math.round(focusZ / texel) * texel;
       sun.target.position.set(x, 0, z);
@@ -491,12 +518,22 @@ export function buildWorld(
     },
     setShadows(size) {
       sun.castShadow = size > 0;
-      // A map of the wrong size, or one no longer wanted, gives its memory back straight away.
-      if (size === 0 || size !== sun.shadow.mapSize.x) {
+      if (size > 0) {
+        shadowSize = size;
+        const { left, right, bottom, top } = sun.shadow.camera;
+        fitShadows({ left, right, bottom, top });
+      } else {
+        // No longer wanted: the map gives its memory back straight away.
         sun.shadow.map?.dispose();
         sun.shadow.map = null;
       }
-      if (size > 0) sun.shadow.mapSize.set(size, size);
+    },
+    showShadows(view) {
+      fitShadows(
+        view
+          ? fitShadowBox(view.footprint([0, WALL_HEIGHT]), SUN_OFFSET, SHADOW_MARGIN)
+          : SHADOW_SQUARE,
+      );
     },
     dispose() {
       // The light owns its shadow map, which nothing else frees.

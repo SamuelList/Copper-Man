@@ -4,7 +4,10 @@ export interface QualityLevel {
   ratio: number;
   /** Studio reflections on metal and glass. */
   reflections: boolean;
-  /** Real-time shadow map size; 0 = no real-time shadows. */
+  /**
+   * How sharp real-time shadows are (the size of a square shadow map over the standard area;
+   * see `World.setShadows`); 0 = no real-time shadows.
+   */
   shadows: number;
   /**
    * Post-processing (see PostFX). 2: everything. 1: bloom, grading and anti-aliasing, without
@@ -16,7 +19,10 @@ export interface QualityLevel {
   mirror: boolean;
 }
 
-/** Best first. */
+/**
+ * Best first. This ladder is for a computer, where the first thing to run short is usually
+ * the graphics card's fill rate on a large screen: pixels go first, effects last.
+ */
 export const QUALITY: readonly QualityLevel[] = [
   { ratio: 2, reflections: true, shadows: 2048, effects: 2, mirror: true },
   { ratio: 1.75, reflections: true, shadows: 2048, effects: 2, mirror: true },
@@ -24,6 +30,24 @@ export const QUALITY: readonly QualityLevel[] = [
   { ratio: 1.25, reflections: true, shadows: 1024, effects: 2, mirror: true },
   { ratio: 1, reflections: true, shadows: 1024, effects: 2, mirror: true },
   { ratio: 1, reflections: true, shadows: 1024, effects: 1, mirror: false },
+  { ratio: 1, reflections: false, shadows: 1024, effects: 1, mirror: false },
+  { ratio: 1, reflections: false, shadows: 0, effects: 0, mirror: false },
+  { ratio: 0.75, reflections: false, shadows: 0, effects: 0, mirror: false },
+];
+
+/**
+ * The ladder for a phone. There the first thing to run short is usually not pixels but draw
+ * calls (each one is work on a single slow core, and a message to the browser's graphics
+ * process), and with them heat and battery. So the mirrored floor, which draws the room a
+ * second time, is what goes first, and sharpness is kept until that hasn't been enough.
+ * Shadows are half as sharp throughout: on a screen that small it doesn't show.
+ */
+export const PHONE_QUALITY: readonly QualityLevel[] = [
+  { ratio: 2, reflections: true, shadows: 1024, effects: 2, mirror: true },
+  { ratio: 2, reflections: true, shadows: 1024, effects: 2, mirror: false },
+  { ratio: 1.5, reflections: true, shadows: 1024, effects: 2, mirror: false },
+  { ratio: 1.5, reflections: true, shadows: 1024, effects: 1, mirror: false },
+  { ratio: 1.25, reflections: true, shadows: 1024, effects: 1, mirror: false },
   { ratio: 1, reflections: false, shadows: 1024, effects: 1, mirror: false },
   { ratio: 1, reflections: false, shadows: 0, effects: 0, mirror: false },
   { ratio: 0.75, reflections: false, shadows: 0, effects: 0, mirror: false },
@@ -39,8 +63,6 @@ const TARGET = 0.75;
 const STRUGGLING = 0.47;
 /** Below this, skip straight to the lowest level. */
 const DESPERATE = 0.33;
-/** Lowest level that still has every effect (reflections, shadows, full post-processing). */
-const KEEP_EFFECTS_LEVEL = 4;
 /** Seconds per frame-rate sample. */
 const WINDOW = 1.5;
 /** Samples ignored at the start while shaders compile and textures upload. */
@@ -71,6 +93,8 @@ export interface Settled {
 }
 
 export interface GovernorOptions {
+  /** The ladder to climb down (the computer's unless told otherwise). */
+  ladder?: readonly QualityLevel[];
   /**
    * The browser is drawing without a graphics card (a software rasteriser). Nothing extra is
    * affordable there, so start at the bottom instead of crawling down to it.
@@ -113,13 +137,18 @@ export class QualityGovernor {
   private warmup = WARMUP;
   private pinned = false;
   private pace: number;
+  private readonly ladder: readonly QualityLevel[];
+  /** Lowest level that still has every effect: where a device that is only a little slow stops. */
+  private readonly keepEffects: number;
 
   constructor(devicePixelRatio: number, options: GovernorOptions = {}) {
+    this.ladder = options.ladder ?? QUALITY;
+    this.keepEffects = this.ladder.reduce((last, q, i) => (q.effects === 2 ? i : last), 0);
     const sharpest = Math.max(
       0,
-      QUALITY.findIndex((q) => q.ratio <= devicePixelRatio),
+      this.ladder.findIndex((q) => q.ratio <= devicePixelRatio),
     );
-    const bottom = QUALITY.length - 1;
+    const bottom = this.ladder.length - 1;
     this.pace = paceFor(options.displayHz ?? 60);
     const last = options.last?.pace === this.pace ? options.last.level : 0;
     this.level = options.software ? bottom : Math.min(bottom, Math.max(sharpest, last - 1));
@@ -131,12 +160,12 @@ export class QualityGovernor {
   }
 
   get current(): QualityLevel {
-    return QUALITY[this.level]!;
+    return this.ladder[this.level]!;
   }
 
   /** Hold one level and stop adapting (screenshots, benchmarks, software renderers). */
   pin(level: number) {
-    this.level = Math.max(0, Math.min(QUALITY.length - 1, Math.round(level)));
+    this.level = Math.max(0, Math.min(this.ladder.length - 1, Math.round(level)));
     this.pinned = true;
   }
 
@@ -168,12 +197,12 @@ export class QualityGovernor {
     // Clearly faster than the screen was thought to manage: it was measured too low (a browser
     // runs an embedded page at half rate until it's touched).
     if (fps > this.pace * 1.3) this.pace = 60;
-    const last = QUALITY.length - 1;
+    const last = this.ladder.length - 1;
     if (this.level >= last) return null;
     this.slow = fps < TARGET * this.pace ? this.slow + 1 : 0;
     if (this.slow < 2) return null;
     this.slow = 0;
-    const floor = fps < STRUGGLING * this.pace ? last : KEEP_EFFECTS_LEVEL;
+    const floor = fps < STRUGGLING * this.pace ? last : this.keepEffects;
     const next = Math.min(fps < DESPERATE * this.pace ? last : this.level + 1, floor);
     if (next <= this.level) return null;
     this.level = next;

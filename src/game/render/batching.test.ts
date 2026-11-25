@@ -29,6 +29,29 @@ describe('batchStatic', () => {
     expect(mesh.geometry.boundingBox!.max.x).toBeCloseTo(3);
   });
 
+  it('carries each finish on the vertices, so differently finished things share a draw', () => {
+    const steel = crate(0.5, 0x888888);
+    (steel.children[0] as THREE.Mesh).material = kit.get(0x888888, {
+      roughness: 0.3,
+      metalness: 0.9,
+      flat: false,
+    });
+    const batch = batchStatic([steel, crate(2.5, 0x00ff00)], kit, 8);
+    expect(batch.children).toHaveLength(1);
+    const { geometry, material } = batch.children[0] as THREE.Mesh;
+    expect(material).toBe(kit.mixed());
+    const surface = geometry.attributes.aSurface!;
+    expect(surface.normalized).toBe(true);
+    // The steel crate's 24 vertices, then the painted one's (the kit's default finish).
+    expect(surface.getX(0)).toBeCloseTo(0.3, 2);
+    expect(surface.getY(0)).toBeCloseTo(0.9, 2);
+    expect(surface.getZ(0)).toBe(0);
+    const painted = kit.get(0x00ff00) as THREE.MeshStandardMaterial;
+    expect(surface.getX(24)).toBeCloseTo(painted.roughness, 2);
+    expect(surface.getY(24)).toBeCloseTo(painted.metalness, 2);
+    expect(surface.getZ(24)).toBe(painted.flatShading ? 1 : 0);
+  });
+
   it('keeps the merged scenery lean', () => {
     const batch = batchStatic([crate(0.5, 0xff0000), crate(2.5, 0x00ff00)], kit, 8);
     const { geometry } = batch.children[0] as THREE.Mesh;

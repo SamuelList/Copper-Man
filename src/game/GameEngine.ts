@@ -50,7 +50,13 @@ import {
 import { TileVisibility } from './render/occlusion';
 import { PALETTE, STUDENT_SHIRTS } from './render/palette';
 import { PostFX } from './render/post/PostFX';
-import { isSoftwareRenderer, QualityGovernor, type Settled } from './render/quality';
+import {
+  isSoftwareRenderer,
+  PHONE_QUALITY,
+  QUALITY,
+  QualityGovernor,
+  type Settled,
+} from './render/quality';
 import { ThreatRing, type Threat } from './render/threats';
 import { WetFloors } from './render/wetFloors';
 import { VisionCone } from './render/visionCones';
@@ -66,6 +72,8 @@ export interface EngineParams {
    * so this engine has drawn its last frame. The shift itself is untouched.
    */
   onContextLost?(): void;
+  /** The first frame is on screen: whatever was covering the wait can go. */
+  onFirstFrame?(): void;
 }
 
 /** Where the last shift's quality ended up (this page load), for the next one to start near. */
@@ -99,6 +107,11 @@ interface NpcViews {
 }
 
 /** `?debug` exposes the live session on `window.__copper` for e2e tests and tinkering. */
+/** A touch screen small enough to hold in one hand (a tablet has a computer's graphics). */
+const isPhone = () =>
+  (window.matchMedia?.('(pointer: coarse)').matches ?? false) &&
+  Math.min(window.screen.width, window.screen.height) < 600;
+
 const debugHooksEnabled = () =>
   import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug');
 
@@ -178,6 +191,7 @@ export class GameEngine {
   /** What the canvas was last fitted to (CSS pixels and pixel ratio). */
   private fitted = { w: 0, h: 0, ratio: 0 };
   private readonly contextLost: (() => void) | undefined;
+  private firstFrame: (() => void) | undefined;
 
   constructor(
     private readonly host: HTMLElement,
@@ -185,6 +199,7 @@ export class GameEngine {
   ) {
     this.session = params.session ?? new ShiftSession(params.config);
     this.contextLost = params.onContextLost;
+    this.firstFrame = params.onFirstFrame;
     const { level } = this.session;
     this.stepFrom = { ...this.session.player.pos };
 
@@ -195,6 +210,7 @@ export class GameEngine {
       powerPreference: 'high-performance',
     });
     this.quality = new QualityGovernor(window.devicePixelRatio, {
+      ladder: isPhone() ? PHONE_QUALITY : QUALITY,
       software: isSoftwareRenderer(this.renderer.getContext()),
       last: lastQuality,
       displayHz: displayRate.hz,
@@ -436,8 +452,17 @@ export class GameEngine {
     this.threats.group.visible = firstPerson;
     // You don't see your own body from behind your own eyes, but it still casts its shadow.
     this.showBody(!firstPerson);
+    this.fitShadows();
     // Show the new view at once, even from the pause menu.
     this.drawnAt = -Infinity;
+  }
+
+  /**
+   * Shadows only where they can be seen: from above that's the patch of ground on screen (a
+   * long strip on a phone held upright), which is far less than the area around the worker.
+   */
+  private fitShadows() {
+    this.world.showShadows(this.mode === 'fps' ? null : this.iso);
   }
 
   /** Draw the worker's body, or leave only its shadow. */
@@ -503,6 +528,7 @@ export class GameEngine {
     this.renderer.setSize(w, h);
     this.iso.resize(w, h);
     this.eyes.resize(w, h);
+    this.fitShadows();
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.post?.setSize(buffer.x, buffer.y);
     this.mirror.setSize(buffer.x, buffer.y);
@@ -565,6 +591,8 @@ export class GameEngine {
     if (!this.lost && (!idle || sinceDrawn >= PAUSED_FRAME_MS)) {
       this.draw(idle ? Math.min(0.25, sinceDrawn / 1000) : dt, now / 1000);
       this.drawnAt = now;
+      this.firstFrame?.();
+      this.firstFrame = undefined;
     }
     this.bridge.publish(now);
   };
@@ -783,7 +811,8 @@ export class GameEngine {
       this.world.update(px + forward.x * SHADOW_LEAD, pz + forward.y * SHADOW_LEAD, time);
       if (this.seen.update(p.pos, VIEW_RANGE)) this.world.cull(this.seen);
     } else {
-      this.world.update(px, pz, time);
+      // Shadows cover what the camera shows, which is centred on where it's looking.
+      this.world.update(this.iso.focus.x, this.iso.focus.z, time);
       this.fog.update(s);
     }
     this.world.walls.update(px, pz, this.iso.toCamera, this.iso.screenRight, dt, !firstPerson);

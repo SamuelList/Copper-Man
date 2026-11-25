@@ -7,6 +7,11 @@ import { GameEngine } from './GameEngine';
 interface Props {
   config: ShiftConfig;
   onShiftEnd(summary: ShiftSummary): void;
+  /**
+   * False while the world is being built (the page can't respond for a moment, so cover it
+   * with something first), true once there is a picture to show, or an error to read.
+   */
+  onReady?(ready: boolean): void;
   className?: string;
 }
 
@@ -18,13 +23,17 @@ const QUICK_LOSS_MS = 20_000;
  * React boundary for the 3D world. Creates the engine on mount and destroys it on unmount
  * (StrictMode-safe). Everything else talks to the game through the stores.
  *
+ * Building the world holds the page up for a moment, so it waits until the screen around it
+ * has been painted: whoever mounts this can show a cover in the meantime (see `onReady`).
+ *
  * It also keeps the shift alive when the graphics don't: a phone takes the WebGL context away
  * from a page left in the background, and may never give that one back. So a lost context
  * means a new engine (new canvas, new context) around the same shift, paused where it stopped.
  */
-export function GameView({ config, onShiftEnd, className }: Props) {
+export function GameView({ config, onShiftEnd, onReady, className }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const onEndRef = useRef(onShiftEnd);
+  const onReadyRef = useRef(onReady);
   /** The shift in progress, for an engine that replaces the one that started it. */
   const shiftRef = useRef<{ config: ShiftConfig; session: ShiftSession } | null>(null);
   /** When the context was last lost, to notice a device that can't hold on to one. */
@@ -35,7 +44,8 @@ export function GameView({ config, onShiftEnd, className }: Props) {
 
   useEffect(() => {
     onEndRef.current = onShiftEnd;
-  }, [onShiftEnd]);
+    onReadyRef.current = onReady;
+  }, [onShiftEnd, onReady]);
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -55,41 +65,51 @@ export function GameView({ config, onShiftEnd, className }: Props) {
       setAttempt((n) => n + 1);
     };
 
-    try {
-      engine = new GameEngine(host, {
-        config,
-        session: underWay,
-        onEnd: (summary) => onEndRef.current(summary),
-        onContextLost: () => {
-          // A finished shift is about to leave this screen anyway.
-          if (engine?.session.status !== 'running') return;
-          if (!document.hidden) return replaceEngine();
-          // Not until someone is looking: a hidden page may not be given a new context.
-          const onVisible = () => {
-            if (document.hidden) return;
-            stopWaiting();
-            replaceEngine();
-          };
-          document.addEventListener('visibilitychange', onVisible);
-          stopWaiting = () => document.removeEventListener('visibilitychange', onVisible);
-        },
-      });
-      shiftRef.current = { config, session: engine.session };
-      // Taking over mid-shift: hand it back paused, so the player can find their feet.
-      if (underWay && attempt > 0) useShiftStore.getState().setPaused(true);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setError(null);
-    } catch (e) {
-      console.error(e);
-      // Rendering failed (no WebGL, or none to spare right now); say so instead of a blank
-      // screen, and don't leave a half-built canvas holding on to a context.
-      for (const canvas of host.querySelectorAll('canvas')) {
-        canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
-        canvas.remove();
+    const build = () => {
+      try {
+        engine = new GameEngine(host, {
+          config,
+          session: underWay,
+          onEnd: (summary) => onEndRef.current(summary),
+          onFirstFrame: () => onReadyRef.current?.(true),
+          onContextLost: () => {
+            // A finished shift is about to leave this screen anyway.
+            if (engine?.session.status !== 'running') return;
+            if (!document.hidden) return replaceEngine();
+            // Not until someone is looking: a hidden page may not be given a new context.
+            const onVisible = () => {
+              if (document.hidden) return;
+              stopWaiting();
+              replaceEngine();
+            };
+            document.addEventListener('visibilitychange', onVisible);
+            stopWaiting = () => document.removeEventListener('visibilitychange', onVisible);
+          },
+        });
+        shiftRef.current = { config, session: engine.session };
+        // Taking over mid-shift: hand it back paused, so the player can find their feet.
+        if (underWay && attempt > 0) useShiftStore.getState().setPaused(true);
+        setError(null);
+      } catch (e) {
+        console.error(e);
+        // Rendering failed (no WebGL, or none to spare right now); say so instead of a blank
+        // screen, and don't leave a half-built canvas holding on to a context.
+        for (const canvas of host.querySelectorAll('canvas')) {
+          canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
+          canvas.remove();
+        }
+        setError("The game couldn't start its 3D graphics (WebGL).");
+        onReadyRef.current?.(true);
       }
-      setError("The game couldn't start its 3D graphics (WebGL).");
-    }
+    };
+
+    // Two frames from now, so what's on screen at the moment (the cover) is painted first.
+    onReadyRef.current?.(false);
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(build);
+    });
     return () => {
+      cancelAnimationFrame(frame);
       stopWaiting();
       engine?.destroy();
     };

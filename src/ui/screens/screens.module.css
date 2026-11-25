@@ -187,6 +187,45 @@
   touch-action: none;
 }
 
+/* Over everything while the school is being built; lets touches through, and fades when done. */
+.loading {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.9rem;
+  background:
+    radial-gradient(ellipse at top, #d9822b22, transparent 60%),
+    repeating-linear-gradient(45deg, #ffffff04 0 12px, transparent 12px 24px), var(--bg);
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.loading[data-done='true'] {
+  opacity: 0;
+}
+
+/* Turned by the compositor, so it keeps going while the page itself is busy. */
+.spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgb(255 255 255 / 0.14);
+  border-top-color: var(--copper-bright);
+  animation: turn 0.8s linear infinite;
+}
+
+@keyframes turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 .overlay {
   position: absolute;
   inset: 0;

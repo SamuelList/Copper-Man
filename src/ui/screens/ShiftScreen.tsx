@@ -59,6 +59,31 @@ function PauseOverlay() {
   );
 }
 
+/**
+ * Shown while the school is being built (and again if the graphics have to be started over):
+ * the page can't respond for that moment, and a frozen menu would look like a crash.
+ */
+function LoadingCover({ done, again }: { done: boolean; again: boolean }) {
+  const [gone, setGone] = useState(false);
+  if (gone && done) return null;
+  return (
+    <div
+      className={styles.loading}
+      data-done={done}
+      role="status"
+      aria-live="polite"
+      onTransitionEnd={() => setGone(done)}
+    >
+      {!done && (
+        <>
+          <span className={styles.spinner} aria-hidden />
+          {again ? 'One moment…' : 'Clocking in…'}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function ShiftScreen() {
   const go = useAppStore((s) => s.go);
   const applyShiftResult = useCareerStore((s) => s.applyShiftResult);
@@ -66,6 +91,12 @@ export function ShiftScreen() {
   const over = useShiftStore((s) => s.result !== null);
   // Lying low takes patience; the phone shouldn't lock while the player waits.
   useWakeLock(!paused && !over);
+  /** Is there a picture yet, and has there been one before (this is a restart)? */
+  const [view, setView] = useState({ ready: false, shown: false });
+  const onReady = useCallback(
+    (ready: boolean) => setView((v) => ({ ready, shown: v.shown || ready })),
+    [],
+  );
 
   // Built once per mount (App keys this screen by shift), so the game never restarts mid-shift.
   const [config] = useState<ShiftConfig>(() => {
@@ -94,9 +125,15 @@ export function ShiftScreen() {
 
   return (
     <div className={styles.shift}>
-      <GameView config={config} onShiftEnd={onShiftEnd} className={styles.gameHost} />
+      <GameView
+        config={config}
+        onShiftEnd={onShiftEnd}
+        onReady={onReady}
+        className={styles.gameHost}
+      />
       <Hud />
       {paused && <PauseOverlay />}
+      <LoadingCover done={view.ready} again={view.shown} />
     </div>
   );
 }

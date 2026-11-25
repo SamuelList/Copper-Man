@@ -54,6 +54,12 @@ export interface SurfaceOptions {
    */
   joined?: boolean;
   /**
+   * The finish comes with each vertex instead of the material: `aSurface` holds roughness,
+   * metalness and whether the face is flat-shaded (0 or 1). Things with different finishes
+   * can then share one material, and so one draw call (see `batching.ts`).
+   */
+  mixed?: boolean;
+  /**
    * Share of the room's light the surface gives back whichever way it faces: light bounced off
    * the floor, which is all a ceiling ever gets.
    */
@@ -87,6 +93,10 @@ varying vec3 vCopperNormal;
 #ifdef COPPER_JOINED
   attribute float aJoined;
 #endif
+#ifdef COPPER_MIXED
+  attribute vec4 aSurface;
+  varying vec3 vCopperSurface;
+#endif
 `;
 
 const VERTEX_BODY = /* glsl */ `
@@ -100,6 +110,9 @@ vec3 copperNormal = objectNormal;
 copperWorld = modelMatrix * copperWorld;
 vCopperPos = copperWorld.xyz;
 vCopperNormal = normalize( mat3( modelMatrix ) * copperNormal );
+#ifdef COPPER_MIXED
+  vCopperSurface = aSurface.xyz;
+#endif
 #ifdef COPPER_JOINED
   // A side pressed against a neighbour can't be seen, but drawn it glints through the joint
   // wherever a pixel lands exactly on the seam. Collapse it off screen instead.
@@ -122,11 +135,23 @@ varying vec3 vCopperNormal;
 #ifdef COPPER_BLOCKS
   uniform sampler2D uWallDetail;
 #endif
+#ifdef COPPER_MIXED
+  varying vec3 vCopperSurface;
+#endif
 `;
 
 /** Surface detail: runs after `normal_fragment_maps`, before the lighting is accumulated. */
 const SURFACE_BODY = /* glsl */ `
 #include <normal_fragment_maps>
+#ifdef COPPER_MIXED
+  // Each vertex brings its own finish (the material's own roughness and metalness are 1).
+  roughnessFactor *= vCopperSurface.x;
+  metalnessFactor *= vCopperSurface.y;
+  // Faceted pieces take the true normal of the triangle, as three's flat shading does.
+  if ( vCopperSurface.z > 0.5 ) {
+    normal = normalize( cross( dFdx( vViewPosition ), dFdy( vViewPosition ) ) );
+  }
+#endif
 #ifdef COPPER_BLOCKS
   // Painted concrete blocks, laid out in world space so they hold still while a wall sinks.
   if ( abs( vCopperNormal.y ) < 0.5 ) {
@@ -184,9 +209,12 @@ export function shadeWithWorld<T extends THREE.Material>(
     `#define COPPER_REACH ${glslFloat(reach)}`,
     options.blocks ? '#define COPPER_BLOCKS' : '',
     options.bounce ? `#define COPPER_BOUNCE ${glslFloat(options.bounce)}` : '',
+    options.mixed ? '#define COPPER_MIXED' : '',
   ].join('\n');
   const patch = options.patch;
-  const vertexDefines = options.joined ? '#define COPPER_JOINED\n' : '';
+  const vertexDefines =
+    (options.joined ? '#define COPPER_JOINED\n' : '') +
+    (options.mixed ? '#define COPPER_MIXED\n' : '');
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, shading, patch?.uniforms);
     shader.vertexShader =
@@ -205,7 +233,7 @@ export function shadeWithWorld<T extends THREE.Material>(
           FRAGMENT_BODY.replace('COPPER_LIGHT', patch?.light ?? ''),
         );
   };
-  const flags = `${options.blocks ? 1 : 0}${options.joined ? 1 : 0}`;
+  const flags = `${options.blocks ? 1 : 0}${options.joined ? 1 : 0}${options.mixed ? 1 : 0}`;
   const key = `copper:${reach}:${flags}:${options.bounce ?? 0}:${patch?.key ?? ''}`;
   material.customProgramCacheKey = () => key;
   return material;
@@ -306,25 +334,24 @@ export class MaterialKit {
   }
 
   /**
-   * A white material that takes its colour from vertex colours. The static batcher folds every
-   * plain kit material with similar roughness/metalness into one of these, so a chunk of the
-   * school draws in a handful of calls instead of one per colour.
+   * A white material that takes its colour and its finish from each vertex (`color` and
+   * `aSurface`). The static batcher folds every plain kit material into this one, so a room's
+   * worth of desks, lockers and pipes draws in a single call however they are painted.
    */
-  vertexColored(roughness: number, metalness: number, flat: boolean) {
-    const key = `vc:${roughness}:${metalness}:${flat}`;
-    let m = this.cache.get(key);
+  mixed() {
+    let m = this.cache.get('mixed');
     if (!m) {
       m = shadeWithWorld(
         new THREE.MeshStandardMaterial({
           color: 0xffffff,
           vertexColors: true,
-          roughness,
-          metalness,
-          flatShading: flat,
+          roughness: 1,
+          metalness: 1,
         }),
         this.shading,
+        { mixed: true },
       );
-      this.cache.set(key, m);
+      this.cache.set('mixed', m);
     }
     return m;
   }

@@ -1,4 +1,4 @@
-import { QUALITY, QualityGovernor } from './quality';
+import { PHONE_QUALITY, QUALITY, QualityGovernor } from './quality';
 
 /** Feed `seconds` of frames at a steady frame rate; returns every level change. */
 function run(q: QualityGovernor, fps: number, seconds: number) {
@@ -131,6 +131,37 @@ describe('QualityGovernor', () => {
     expect(effects).toEqual([...effects].sort((a, b) => b - a));
     expect(QUALITY.every((l) => l.effects > 0 || l.shadows === 0)).toBe(true);
     expect(QUALITY[QUALITY.length - 1]!.effects).toBe(0);
+  });
+
+  it('on a phone gives up the mirrored floor before any sharpness', () => {
+    const q = new QualityGovernor(3, { ladder: PHONE_QUALITY });
+    expect(q.current).toMatchObject({ ratio: 2, mirror: true, effects: 2 });
+    // A little slow: the first step keeps every pixel.
+    run(q, 40, 6.1);
+    expect(q.current).toMatchObject({ ratio: 2, mirror: false, effects: 2 });
+    // Still a little slow: now pixels, and it stops while it still has every effect.
+    run(q, 40, 60);
+    expect(q.current).toMatchObject({ ratio: 1.5, mirror: false, effects: 2 });
+    // Properly struggling: all the way down if need be.
+    run(q, 20, 60);
+    expect(q.current.effects).toBe(0);
+  });
+
+  it('never trades a cheaper rung for a dearer one, on either ladder', () => {
+    for (const ladder of [QUALITY, PHONE_QUALITY]) {
+      for (let i = 1; i < ladder.length; i++) {
+        const [a, b] = [ladder[i - 1]!, ladder[i]!];
+        expect(b.ratio).toBeLessThanOrEqual(a.ratio);
+        expect(b.shadows).toBeLessThanOrEqual(a.shadows);
+        expect(b.effects).toBeLessThanOrEqual(a.effects);
+        expect(Number(b.mirror)).toBeLessThanOrEqual(Number(a.mirror));
+        expect(Number(b.reflections)).toBeLessThanOrEqual(Number(a.reflections));
+        expect(b).not.toEqual(a);
+      }
+      // The mirrored floor needs the post chain's targets.
+      expect(ladder.every((l) => !l.mirror || l.effects > 0)).toBe(true);
+      expect(ladder[ladder.length - 1]!.effects).toBe(0);
+    }
   });
 
   it('stays put once pinned', () => {

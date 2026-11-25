@@ -12,9 +12,9 @@ export type Cells = number | ((x: number, z: number) => string);
 /**
  * Static batching. The procedural models are dozens of small meshes each; drawn one by one, a
  * school full of them costs thousands of draw calls, which phones can't afford. This merges
- * every static mesh per cell. Plain coloured materials are folded into a few vertex-coloured
- * ones (grouped by roughness and metalness), so a cell draws in a handful of calls; cells off
- * screen are still culled.
+ * every static mesh per cell. Plain coloured materials are folded into one, their colour and
+ * finish (roughness, metalness, faceting) carried by each vertex instead, so a cell's plain
+ * scenery draws in one or two calls however it is painted; cells off screen are still culled.
  *
  * The merged meshes are most of the vertices in the game, so they are kept lean: welded and
  * indexed (a corner shared by several triangles is stored once: a rounded box comes as 144
@@ -47,9 +47,7 @@ export function batchStatic(
       if (!mesh.isMesh || Array.isArray(mesh.material)) return;
       const source = mesh.material;
       const plain = plainColor(source);
-      const material = plain
-        ? kit.vertexColored(plain.roughness, plain.metalness, plain.flat)
-        : source;
+      const material = plain ? kit.mixed() : source;
       const key = `${chunk}|${material.uuid}|${mesh.castShadow}`;
       let bucket = buckets.get(key);
       if (!bucket) {
@@ -58,7 +56,7 @@ export function batchStatic(
       }
       const piece = lean(mesh.geometry, textured(material)).clone();
       piece.applyMatrix4(mesh.matrixWorld);
-      if (plain) paint(piece, plain.color);
+      if (plain) paint(piece, plain);
       bucket.parts.push(piece);
     });
   }
@@ -139,30 +137,46 @@ function weld(source: THREE.BufferGeometry, uv: boolean): THREE.BufferGeometry {
   return welded;
 }
 
-/** Snap to a few roughness/metalness levels so similar materials share a batch. */
-const quantize = (v: number, steps: number) => Math.round(v * steps) / steps;
+/** How a plain material looks, for carrying on the vertices instead. */
+interface Finish {
+  color: THREE.Color;
+  roughness: number;
+  metalness: number;
+  flat: boolean;
+}
 
-/** An opaque, untextured, non-glowing kit material, described for vertex colouring. */
-function plainColor(m: THREE.Material) {
+/** An opaque, untextured, non-glowing kit material, described for the vertices. */
+function plainColor(m: THREE.Material): Finish | null {
   const info = m.userData.kit as { opacity: number; emissive: number; map: boolean } | undefined;
   if (!info || info.opacity < 1 || info.emissive || info.map) return null;
   const std = m as THREE.MeshStandardMaterial;
   return {
     color: std.color,
-    roughness: quantize(std.roughness, 5),
-    metalness: quantize(std.metalness, 3),
+    roughness: std.roughness,
+    metalness: std.metalness,
     flat: std.flatShading,
   };
 }
 
-/** Fill a vertex colour attribute (linear, like material colours). */
-function paint(g: THREE.BufferGeometry, color: THREE.Color) {
+/**
+ * Give every vertex its colour (linear, like material colours) and its finish: roughness,
+ * metalness and faceting, a byte each (`aSurface`, read by the kit's mixed material).
+ */
+function paint(g: THREE.BufferGeometry, finish: Finish) {
   const count = g.attributes.position!.count;
-  const data = new Float32Array(count * 3);
-  for (let i = 0; i < data.length; i += 3) {
-    data[i] = color.r;
-    data[i + 1] = color.g;
-    data[i + 2] = color.b;
+  const color = new Float32Array(count * 3);
+  const surface = new Uint8Array(count * 4);
+  const rough = Math.round(finish.roughness * 255);
+  const metal = Math.round(finish.metalness * 255);
+  const flat = finish.flat ? 255 : 0;
+  for (let i = 0; i < count; i++) {
+    color[i * 3] = finish.color.r;
+    color[i * 3 + 1] = finish.color.g;
+    color[i * 3 + 2] = finish.color.b;
+    surface[i * 4] = rough;
+    surface[i * 4 + 1] = metal;
+    surface[i * 4 + 2] = flat;
   }
-  g.setAttribute('color', new THREE.BufferAttribute(data, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(color, 3));
+  g.setAttribute('aSurface', new THREE.BufferAttribute(surface, 4, true));
 }
