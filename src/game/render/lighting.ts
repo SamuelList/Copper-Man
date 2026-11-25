@@ -48,7 +48,7 @@ const STYLE: Record<RoomKind, LampStyle> = {
   hallway: { tint: [1, 0.96, 0.88], spacing: 4.6, spread: 0.72, fitting: 'panel', pooled: 0.6 },
   classroom: { tint: [1, 0.95, 0.86], spacing: 3.3, spread: 0.9, fitting: 'panel', pooled: 0.5 },
   restroom: { tint: [0.9, 0.97, 1], spacing: 3.2, spread: 0.9, fitting: 'panel', pooled: 0.5 },
-  closet: { tint: [1, 0.78, 0.52], spacing: 6, spread: 0.6, fitting: 'bulb', pooled: 0.7 },
+  closet: { tint: [1, 0.78, 0.52], spacing: 6, spread: 0.6, fitting: 'bulb', pooled: 0.6 },
   lounge: { tint: [1, 0.82, 0.62], spacing: 3.8, spread: 0.7, fitting: 'bulb', pooled: 0.65 },
   boiler: { tint: [1, 0.5, 0.2], spacing: 0, spread: 0, fitting: 'none', pooled: 0 },
   office: { tint: [1, 0.92, 0.8], spacing: 3.3, spread: 0.85, fitting: 'panel', pooled: 0.5 },
@@ -57,7 +57,7 @@ const STYLE: Record<RoomKind, LampStyle> = {
   gym: { tint: [1, 0.98, 0.93], spacing: 4.6, spread: 0.85, fitting: 'panel', pooled: 0.5 },
   cafeteria: { tint: [1, 0.95, 0.86], spacing: 3.8, spread: 0.85, fitting: 'panel', pooled: 0.5 },
   kitchen: { tint: [0.93, 0.98, 1], spacing: 3.3, spread: 0.9, fitting: 'panel', pooled: 0.5 },
-  mechanical: { tint: [0.5, 0.8, 1], spacing: 5, spread: 0.6, fitting: 'bulb', pooled: 0.65 },
+  mechanical: { tint: [0.5, 0.8, 1], spacing: 5, spread: 0.6, fitting: 'bulb', pooled: 0.55 },
 };
 
 /** Even fill is a little cooler than the lamps, so pools read warm against their shadows. */

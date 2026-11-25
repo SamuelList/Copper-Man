@@ -118,7 +118,7 @@ export class PostFX {
       uProjInv: { value: new THREE.Matrix4() },
       uDepthTexel: { value: new THREE.Vector2() },
       uRadius: { value: 0.6 },
-      uIntensity: { value: 1.5 },
+      uIntensity: { value: 2.4 },
       uBias: { value: 0.02 },
       uFar: { value: 200 },
     });
@@ -234,7 +234,7 @@ export class PostFX {
 
   /**
    * Draw `scene` through the chain to the screen. `danger` (0..1) pulses the edge of the
-   * screen red.
+   * screen red; `exposure` overrides the look's (eye adaptation).
    */
   render(
     scene: THREE.Scene,
@@ -242,6 +242,7 @@ export class PostFX {
     look: PostLook,
     time: number,
     danger = 0,
+    exposure = look.exposure,
   ) {
     const r = this.renderer;
     const lens = { tilt: look.tilt > 0, aberration: look.aberration > 0 };
@@ -300,7 +301,7 @@ export class PostFX {
     c.tBloom!.value = levels[0]?.texture ?? null;
     c.uProjInv!.value.copy(camera.projectionMatrixInverse);
     c.uFar!.value = camera.far;
-    c.uExposure!.value = look.exposure;
+    c.uExposure!.value = exposure;
     // Each level adds its share, so the sum is normalised by how many there are.
     c.uBloom!.value = count > 0 ? look.bloom / count : 0;
     c.uAo!.value = look.ao;

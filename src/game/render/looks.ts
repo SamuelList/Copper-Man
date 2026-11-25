@@ -5,6 +5,21 @@ import type { PostLook } from './post/PostFX';
 export interface ViewLook extends PostLook {
   /** Strength of the floor's reflections. */
   mirror: number;
+  /**
+   * How much your eyes adjust to the dark: standing somewhere pitch dark, exposure rises by
+   * this much (1 doubles it). Seen from above a dark room should stay dark; inside it you
+   * need to see the walls.
+   */
+  adaptation: number;
+}
+
+/**
+ * Exposure multiplier for standing in `light` (core's 0 dark .. 1 lit): 1 in a bright room,
+ * easing up to `1 + adaptation` in a dark one.
+ */
+export function eyeAdaptation(light: number, adaptation: number) {
+  const t = Math.max(0, Math.min(1, (light - 0.25) / 0.6));
+  return 1 + adaptation * (1 - t * t * (3 - 2 * t));
 }
 
 /**
@@ -28,6 +43,7 @@ export const LOOKS: Record<ViewMode, ViewLook> = {
     shadowTint: [0.95, 0.99, 1.07],
     highlightTint: [1.04, 1.01, 0.96],
     mirror: 1.6,
+    adaptation: 0.25,
   },
   fps: {
     exposure: 1.12,
@@ -44,5 +60,6 @@ export const LOOKS: Record<ViewMode, ViewLook> = {
     shadowTint: [0.94, 0.99, 1.08],
     highlightTint: [1.05, 1.01, 0.95],
     mirror: 0.8,
+    adaptation: 0.6,
   },
 };

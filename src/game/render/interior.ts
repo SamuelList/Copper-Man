@@ -163,7 +163,7 @@ function buildFittings(
  */
 function buildDoorHeads(level: LevelDef, kit: MaterialKit, height: number): THREE.Object3D {
   const wall = kit.wall(PALETTE.wallSide, 0.9);
-  const casing = kit.get(0x5b4a3f, { roughness: 0.55 });
+  const casing = kit.get(PALETTE.door, { roughness: 0.55 });
   const open = (col: number, row: number) => tileAt(level, col, row) !== 'wall';
   const frames: THREE.Object3D[] = [];
   for (const door of level.doors) {

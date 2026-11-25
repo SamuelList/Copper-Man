@@ -380,9 +380,11 @@ export function buildWorld(
     far: 100,
   });
   sun.shadow.camera.updateProjectionMatrix();
-  sun.shadow.bias = -0.0005;
+  // The soft filter reads a few texels to every side; this much bias keeps a lit floor clear
+  // of its own shadow across that spread.
+  sun.shadow.bias = -0.0007;
   sun.shadow.normalBias = 0.025;
-  sun.shadow.radius = 3.5;
+  sun.shadow.radius = 2.6;
   scene.add(sun, sun.target);
 
   // Boiler fire glow.

@@ -26,7 +26,7 @@ import { FloorMirror } from './render/floorMirror';
 import { FogOfWar } from './render/fogOfWar';
 import { Hands } from './render/hands';
 import { IsoCamera } from './render/isoCamera';
-import { LOOKS, type ViewLook } from './render/looks';
+import { eyeAdaptation, LOOKS, type ViewLook } from './render/looks';
 import {
   Dial,
   DustPuffs,
@@ -119,6 +119,8 @@ export class GameEngine {
   private stepFrom: Vec2;
   /** 0..1: eased "you are being chased", for the red pulse at the edge of the screen. */
   private danger = 0;
+  /** Exposure multiplier, easing toward what the light where you stand calls for. */
+  private adapted = 1;
   private readonly kit: MaterialKit;
   private readonly world: World;
   private readonly fog: FogOfWar;
@@ -709,6 +711,9 @@ export class GameEngine {
 
     const chased = s.status === 'running' && boss.mode === 'chase' ? 1 : 0;
     this.danger += (chased - this.danger) * Math.min(1, dt * 4);
+    // Eyes take a moment to adjust to a darker or brighter room.
+    const adaptTo = eyeAdaptation(s.playerLight, this.look.adaptation);
+    this.adapted += (adaptTo - this.adapted) * Math.min(1, dt * 1.6);
     const camera = firstPerson ? this.eyes.camera : this.iso.camera;
     const { effects, mirror } = this.quality.current;
     if (this.post && mirror) {
@@ -722,8 +727,10 @@ export class GameEngine {
     } else this.world.reflect(null, this.mirror.matrix, 0);
     if (this.post && effects > 0) {
       const pulse = this.danger * (0.2 + 0.1 * Math.sin(time * 7));
-      this.post.render(this.scene, camera, this.look, time, pulse);
+      const exposure = this.look.exposure * this.adapted;
+      this.post.render(this.scene, camera, this.look, time, pulse, exposure);
     } else {
+      this.renderer.toneMappingExposure = this.look.exposure * this.adapted;
       this.renderer.setRenderTarget(null);
       this.renderer.render(this.scene, camera);
     }

@@ -34,7 +34,7 @@ function PauseOverlay() {
         >
           Clock out early
         </Button>
-        <ViewSwitch />
+        <ViewSwitch fill />
         {touch ? (
           <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
             Drag on the left to walk. Hold 🏃 to sprint and ✋ to scrap, unlock and sell. Tap

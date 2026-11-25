@@ -11,11 +11,18 @@ void main() {
 }
 `;
 
-/** View-space position from the depth buffer; works for perspective and orthographic cameras. */
+/**
+ * View-space position from the depth buffer; works for perspective and orthographic cameras.
+ * The position is taken at the centre of the depth texel that's actually read, not at `uv`
+ * itself: half a texel's slip across a sloping floor is enough to make it shade itself in
+ * stripes.
+ */
 const VIEW_POSITION = /* glsl */ `
 uniform sampler2D tDepth;
 uniform mat4 uProjInv;
+uniform vec2 uDepthTexel;
 vec3 viewPosition( vec2 uv ) {
+  uv = ( floor( uv / uDepthTexel ) + 0.5 ) * uDepthTexel;
   float depth = texture2D( tDepth, uv ).x;
   vec4 view = uProjInv * vec4( uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0 );
   return view.xyz / view.w;
@@ -45,7 +52,6 @@ export const AO_FRAGMENT = /* glsl */ `
 ${VIEW_POSITION}
 ${DEPTH_PACKING}
 uniform mat4 uProj;
-uniform vec2 uDepthTexel;
 uniform float uRadius;
 uniform float uIntensity;
 uniform float uBias;
@@ -336,11 +342,12 @@ void main() {
   color += texture2D( tBloom, vUv ).rgb * uBloom;
   color = toneMap( color );
 
-  // Grade: saturation, contrast (pivoting low, so shadows keep their detail), cool shadows and
-  // warm highlights.
+  // Grade: saturation, contrast, cool shadows and warm highlights. Contrast is a power curve
+  // about a low pivot: it deepens the shadows without ever clipping them to black, so a dark
+  // room keeps its detail.
   float luma = dot( color, vec3( 0.2126, 0.7152, 0.0722 ) );
   color = mix( vec3( luma ), color, uSaturation );
-  color = max( ( color - 0.36 ) * uContrast + 0.36, 0.0 );
+  color = 0.36 * pow( max( color, 0.0 ) / 0.36, vec3( uContrast ) );
   color *= mix( uShadowTint, uHighlightTint, smoothstep( 0.0, 1.0, luma ) );
 
   vec2 fromCenter = vUv - 0.5;
