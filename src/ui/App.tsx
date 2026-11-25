@@ -1,6 +1,7 @@
 import { useAppStore, type Screen } from '@state/appStore';
 import { useInputMode } from '@state/inputMode';
 import { useEffect, type ComponentType } from 'react';
+import { useDisplayRateProbe } from './hooks/useDisplayRateProbe';
 import { CharacterSelectScreen } from './screens/CharacterSelectScreen';
 import { FiredScreen } from './screens/FiredScreen';
 import { ShiftScreen } from './screens/ShiftScreen';
@@ -46,6 +47,7 @@ function useInputModeTracking() {
 export function App() {
   useInputModeTracking();
   const screen = useAppStore((s) => s.screen);
+  useDisplayRateProbe(screen !== 'shift');
   const shiftNonce = useAppStore((s) => s.shiftNonce);
   const Current = SCREENS[screen];
   // Keying by shift guarantees a fresh game instance per shift.

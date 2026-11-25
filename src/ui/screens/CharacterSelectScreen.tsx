@@ -9,15 +9,40 @@ import styles from './screens.module.css';
 
 const TRADE_LABEL = { plumbing: 'Plumber', hvac: 'HVAC tech' } as const;
 
+/** Two taps (or clicks) on the same card this close together hire that worker. */
+const DOUBLE_TAP_MS = 450;
+
+/**
+ * Tells a second tap on the same thing from a tap on something else, or one long after the
+ * first. Counted here rather than left to the browser's double-click: that also fires when the
+ * first tap of the pair was the one that opened this screen, which would hire whoever happened
+ * to be under a thumb that tapped twice.
+ */
+function doubleTaps(withinMs: number) {
+  let last: { id: string; at: number } | null = null;
+  return (id: string): boolean => {
+    const now = performance.now();
+    const again = last !== null && last.id === id && now - last.at < withinMs;
+    last = again ? null : { id, at: now };
+    return again;
+  };
+}
+
 export function CharacterSelectScreen() {
   const [selected, setSelected] = useState<string>(CHARACTERS.all[0]!.id);
   const startCareer = useCareerStore((s) => s.startCareer);
   const { go, startShift } = useAppStore();
   const chosen = CHARACTERS.get(selected);
+  const [tappedTwice] = useState(() => doubleTaps(DOUBLE_TAP_MS));
 
-  const hire = () => {
-    startCareer(selected);
+  const hire = (id: string) => {
+    startCareer(id);
     startShift();
+  };
+
+  const pick = (id: string) => {
+    if (tappedTwice(id)) hire(id);
+    else setSelected(id);
   };
 
   return (
@@ -40,8 +65,7 @@ export function CharacterSelectScreen() {
                 .filter(Boolean)
                 .join(' ')}
               style={{ '--accent': accent } as CSSProperties}
-              onClick={() => setSelected(c.id)}
-              onDoubleClick={hire}
+              onClick={() => pick(c.id)}
             >
               <div style={{ display: 'flex', gap: '0.9rem', alignItems: 'center' }}>
                 <div className={styles.avatar} aria-hidden />
@@ -79,7 +103,7 @@ export function CharacterSelectScreen() {
         <Button variant="ghost" onClick={() => go('title')}>
           Back
         </Button>
-        <Button variant="primary" onClick={hire} className={styles.clockIn}>
+        <Button variant="primary" onClick={() => hire(selected)} className={styles.clockIn}>
           Hire {chosen.name} &amp; clock in
         </Button>
       </div>

@@ -2,6 +2,7 @@ import { CONSUMABLES } from '@core/content/consumables';
 import { useShiftStore } from '@state/shiftStore';
 import { virtualInput } from '@state/virtualInput';
 import {
+  useEffect,
   useRef,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -27,24 +28,53 @@ const VERB_ICON: Record<string, string> = {
 };
 
 /**
- * Pointer handlers for a button you hold down (interact, sprint): captures the finger so sliding
- * off the button doesn't drop it, and lets go on release, cancel or lost capture.
+ * Let go of whatever is held when the game stops being in front (another app, the lock screen,
+ * a call): a finger lifted while the page is hidden is never reported, and the control would
+ * stay down, or stop answering, until the page was reloaded.
  */
-function holdHandlers(key: 'interact' | 'sprint') {
-  const set = (el: HTMLElement, on: boolean) => {
+function useLetGoWhenAway(letGo: () => void) {
+  const latest = useRef(letGo);
+  useEffect(() => {
+    latest.current = letGo;
+  });
+  useEffect(() => {
+    const away = () => latest.current();
+    const hidden = () => {
+      if (document.hidden) away();
+    };
+    window.addEventListener('blur', away);
+    window.addEventListener('pagehide', away);
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      window.removeEventListener('blur', away);
+      window.removeEventListener('pagehide', away);
+      document.removeEventListener('visibilitychange', hidden);
+    };
+  }, []);
+}
+
+/**
+ * Props for a button you hold down (interact, sprint): captures the finger so sliding off the
+ * button doesn't drop it, and lets go on release, cancel, lost capture or the game going away.
+ */
+function useHold(key: 'interact' | 'sprint') {
+  const button = useRef<HTMLButtonElement>(null);
+  const set = (on: boolean) => {
     virtualInput[key] = on;
-    el.dataset.held = String(on);
+    if (button.current) button.current.dataset.held = String(on);
   };
+  useLetGoWhenAway(() => set(false));
   const hold = (on: boolean) => (e: ReactPointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (on) e.currentTarget.setPointerCapture?.(e.pointerId);
-    set(e.currentTarget, on);
+    set(on);
   };
   return {
+    ref: button,
     onPointerDown: hold(true),
     onPointerUp: hold(false),
     onPointerCancel: hold(false),
-    onLostPointerCapture: (e: ReactPointerEvent<HTMLButtonElement>) => set(e.currentTarget, false),
+    onLostPointerCapture: () => set(false),
     onContextMenu: (e: ReactMouseEvent) => e.preventDefault(),
   };
 }
@@ -100,8 +130,7 @@ function Joystick() {
     setKnob(Math.cos(angle) * clamped * STICK_RADIUS, Math.sin(angle) * clamped * STICK_RADIUS);
   };
 
-  const onUp = (e: ReactPointerEvent) => {
-    if (active.current?.id !== e.pointerId) return;
+  const letGo = () => {
     active.current = null;
     virtualInput.stickX = 0;
     virtualInput.stickY = 0;
@@ -109,6 +138,11 @@ function Joystick() {
     base.current!.dataset.active = 'false';
     base.current!.style.left = '';
     base.current!.style.top = '';
+  };
+  useLetGoWhenAway(letGo);
+
+  const onUp = (e: ReactPointerEvent) => {
+    if (active.current?.id === e.pointerId) letGo();
   };
 
   return (
@@ -154,6 +188,9 @@ function LookZone() {
   const onUp = (e: ReactPointerEvent) => {
     if (active.current?.id === e.pointerId) active.current = null;
   };
+  useLetGoWhenAway(() => {
+    active.current = null;
+  });
 
   return (
     <div
@@ -179,12 +216,13 @@ function InteractButton() {
     }),
   );
   const ready = !!prompt?.enabled;
+  const hold = useHold('interact');
   return (
     <button
       type="button"
       className={cx(styles.btn, styles.ring, styles.interact, ready && styles.ready)}
       style={{ '--fill': prompt?.progress ?? 0 } as CSSProperties}
-      {...holdHandlers('interact')}
+      {...hold}
       aria-label={prompt ? `Hold to ${prompt.verb}` : 'Interact'}
       data-testid="touch-interact"
     >
@@ -202,6 +240,7 @@ function SprintButton() {
       boost: (s.snapshot?.boost ?? 0) > 0,
     })),
   );
+  const hold = useHold('sprint');
   return (
     <button
       type="button"
@@ -209,7 +248,7 @@ function SprintButton() {
       style={{ '--fill': boost ? 1 : fill } as CSSProperties}
       data-boost={boost}
       data-empty={!boost && fill <= 0}
-      {...holdHandlers('sprint')}
+      {...hold}
       aria-label="Sprint"
       data-testid="touch-sprint"
     >

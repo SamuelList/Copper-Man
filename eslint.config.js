@@ -15,7 +15,16 @@ import tseslint from 'typescript-eslint';
 const restrict = (patterns) => ['error', { patterns }];
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'coverage', 'playwright-report', 'test-results'] },
+  {
+    ignores: [
+      'dist',
+      'dist-artifact',
+      'node_modules',
+      'coverage',
+      'playwright-report',
+      'test-results',
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

@@ -86,7 +86,8 @@ export function ShiftSummaryScreen() {
           <LevelBadge level={level} xp={xp} next={xpToNext(level)} />
         </div>
       </Panel>
-      <div className={styles.actions}>
+      {/* Pinned to the bottom: on a small phone the tally runs longer than the screen. */}
+      <div className={styles.stickyActions}>
         <Button variant="primary" onClick={() => go('shop')}>
           {skillPoints > 0 ? 'Spend skill points & shop' : 'Hit the hardware store'}
         </Button>

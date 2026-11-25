@@ -31,8 +31,8 @@
 
 .stickBase {
   position: absolute;
-  left: calc(max(16px, env(safe-area-inset-left)) + 56px);
-  top: calc(100% - max(14px, env(safe-area-inset-bottom)) - 58px);
+  left: calc(max(16px, var(--safe-left)) + 56px);
+  top: calc(100% - max(14px, var(--safe-bottom)) - 58px);
   width: 104px;
   height: 104px;
   margin: -52px 0 0 -52px;
@@ -43,8 +43,6 @@
     rgb(255 255 255 / 0.03) 0 50%,
     rgb(255 255 255 / 0.09) 51% 100%
   );
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
   opacity: 0.5;
   transition: opacity 0.15s ease;
 }
@@ -74,8 +72,8 @@
 
 .actions {
   position: absolute;
-  right: max(12px, env(safe-area-inset-right));
-  bottom: max(12px, env(safe-area-inset-bottom));
+  right: max(12px, var(--safe-right));
+  bottom: max(12px, var(--safe-bottom));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -102,15 +100,14 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgb(10 12 16 / 0.5);
+  /* Tinted, not blurred: see touchBar.module.css. */
+  background: rgb(10 12 16 / 0.62);
   color: var(--text);
   font: inherit;
   font-weight: 800;
   box-shadow:
     0 4px 14px rgb(0 0 0 / 0.35),
     inset 0 0 0 1px rgb(255 255 255 / 0.12);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
   transition:
     transform 0.08s ease,
     box-shadow 0.15s ease;
@@ -132,8 +129,8 @@
 
 .caption {
   margin-top: 2px;
-  font-size: 9px;
-  letter-spacing: 0.06em;
+  font-size: 11px;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   opacity: 0.85;
 }
@@ -200,7 +197,7 @@
 .interact {
   width: 76px;
   height: 76px;
-  background: rgb(10 12 16 / 0.6);
+  background: rgb(10 12 16 / 0.7);
 }
 
 .interact .icon {
@@ -266,13 +263,11 @@
 }
 
 .touch .gadget {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
   border-color: rgb(255 255 255 / 0.12);
-  background: rgb(10 12 16 / 0.5);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
+  background: rgb(10 12 16 / 0.62);
   box-shadow: 0 3px 10px rgb(0 0 0 / 0.3);
 }
 
@@ -283,7 +278,7 @@
 .touch .count {
   right: 3px;
   bottom: 1px;
-  font-size: 0.6rem;
+  font-size: 11px;
 }
 
 @keyframes spin {

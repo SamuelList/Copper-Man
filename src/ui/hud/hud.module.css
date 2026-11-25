@@ -456,19 +456,20 @@
   user-select: none;
 }
 
+/* Tinted, not blurred: see touchBar.module.css. */
 .hud[data-touch] .card {
   padding: 0.35rem 0.75rem;
   border-radius: 14px;
-  background: rgb(10 12 16 / 0.55);
+  background: rgb(10 12 16 / 0.72);
   border-color: rgb(255 255 255 / 0.09);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   text-shadow: none;
 }
 
 /* Toasts drop in under the top bar as small pills. */
 .hud[data-touch] .toasts {
-  top: calc(max(6px, env(safe-area-inset-top)) + 38px);
+  top: calc(max(6px, var(--safe-top)) + 38px);
   right: auto;
   left: 50%;
   transform: translateX(-50%);
@@ -485,10 +486,8 @@
   padding: 0.3rem 0.75rem 0.3rem 0.6rem;
   border-left: 0;
   border-radius: 14px;
-  background: rgb(10 12 16 / 0.6);
+  background: rgb(10 12 16 / 0.74);
   border: 1px solid rgb(255 255 255 / 0.09);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  backdrop-filter: blur(12px) saturate(140%);
   font-size: 0.72rem;
   font-weight: 600;
   text-shadow: none;
@@ -518,7 +517,7 @@
 
 /* The prompt floats between the thumbs. */
 .hud[data-touch] .bottomCenter {
-  bottom: max(14px, env(safe-area-inset-bottom));
+  bottom: max(14px, var(--safe-bottom));
 }
 
 .hud[data-touch] .prompt {
@@ -536,11 +535,11 @@
 /* Portrait: the thumbs take the bottom, so the prompt sits above them. */
 @media (max-width: 560px) {
   .hud[data-touch] .toasts {
-    top: calc(max(6px, env(safe-area-inset-top)) + 74px);
+    top: calc(max(6px, var(--safe-top)) + 74px);
   }
 
   .hud[data-touch] .bottomCenter {
-    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 140px);
+    bottom: calc(max(12px, var(--safe-bottom)) + 140px);
   }
 
   .hud[data-touch] .prompt {

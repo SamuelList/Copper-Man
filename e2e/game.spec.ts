@@ -117,6 +117,36 @@ test('a full day: hire, sneak, sprint, sell, clock out, shop, next day', async (
   await page.getByRole('button', { name: 'Resume' }).click();
   await expect(page.getByRole('dialog', { name: 'Paused' })).toBeHidden();
 
+  // The browser takes the graphics context away (a phone does, from a page left in the
+  // background). The same shift carries on in a new canvas, paused where it stopped.
+  const lostAt = await page.evaluate(() => {
+    const copper = (window as DebugWindow).__copper!;
+    (window as { shiftBefore?: unknown }).shiftBefore = copper.session;
+    const canvas = document.querySelector('canvas')!;
+    canvas.dataset.lost = 'yes';
+    canvas.getContext('webgl2')!.getExtension('WEBGL_lose_context')!.loseContext();
+    return { elapsed: copper.session.elapsed, x: copper.session.player.pos.x };
+  });
+  await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
+  await expect(page.locator('canvas:not([data-lost])')).toBeVisible();
+  await expect(page.locator('canvas[data-lost]')).toHaveCount(0);
+  await waitForSession(page);
+  const carriedOn = await page.evaluate(() => {
+    const copper = (window as DebugWindow).__copper!;
+    return {
+      sameShift: copper.session === (window as { shiftBefore?: unknown }).shiftBefore,
+      x: copper.session.player.pos.x,
+    };
+  });
+  expect(carriedOn).toEqual({ sameShift: true, x: lostAt.x });
+  await page.getByRole('button', { name: 'Resume' }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.elapsed), {
+      timeout: 20_000,
+    })
+    .toBeGreaterThan(lostAt.elapsed + 0.5);
+  await expect(page.getByTestId('hud')).toBeVisible();
+
   // First person: V switches camera, the arrow keys turn your head, and W walks where you look.
   // (In a classroom with room to walk: indoors is also much less for a software renderer to
   // draw than the car park.)

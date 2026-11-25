@@ -4,6 +4,7 @@ import type { Vec2 } from '@core/model/types';
 import { ShiftSession } from '@core/session/ShiftSession';
 import type { ShiftConfig, ShiftSummary } from '@core/session/types';
 import { bagTotal } from '@core/systems/bag';
+import { displayRate } from '@state/displayRate';
 import { bossLine, custodianLine } from '@state/messages';
 import { useSettings, type ViewMode } from '@state/settingsStore';
 import { useShiftStore } from '@state/shiftStore';
@@ -49,7 +50,7 @@ import {
 import { TileVisibility } from './render/occlusion';
 import { PALETTE, STUDENT_SHIRTS } from './render/palette';
 import { PostFX } from './render/post/PostFX';
-import { isSoftwareRenderer, QualityGovernor } from './render/quality';
+import { isSoftwareRenderer, QualityGovernor, type Settled } from './render/quality';
 import { ThreatRing, type Threat } from './render/threats';
 import { WetFloors } from './render/wetFloors';
 import { VisionCone } from './render/visionCones';
@@ -58,10 +59,25 @@ import { buildWorld, type World } from './render/world';
 export interface EngineParams {
   config: ShiftConfig;
   onEnd(summary: ShiftSummary): void;
+  /** A shift already under way, for an engine that takes over from another (see GameView). */
+  session?: ShiftSession;
+  /**
+   * The browser took the graphics context away (phones do, from pages left in the background),
+   * so this engine has drawn its last frame. The shift itself is untouched.
+   */
+  onContextLost?(): void;
 }
+
+/** Where the last shift's quality ended up (this page load), for the next one to start near. */
+let lastQuality: Settled | null = null;
 
 /** Fixed simulation step: deterministic and frame-rate independent. */
 const STEP = 1 / 60;
+/**
+ * Paused, the world stands still, so it's redrawn only this often: enough to follow a turned
+ * phone or a change of camera from the pause menu, and it lets a phone cool down.
+ */
+const PAUSED_FRAME_MS = 250;
 /** Cap catch-up work after a stall (spiral-of-death guard). */
 const MAX_STEPS_PER_FRAME = 8;
 /** Pause before handing the summary to React so the end-of-shift banner can be read. */
@@ -153,23 +169,36 @@ export class GameEngine {
   private pendingUse: string | null = null;
   private endTimer: number | undefined;
   private destroyed = false;
+  /** The graphics context is gone: nothing more can be drawn through this renderer. */
+  private lost = false;
+  /** When the last frame was drawn (ms, the loop's clock). */
+  private drawnAt = -Infinity;
+  /** The host changed size since the canvas was last fitted to it. */
+  private resizePending = false;
+  /** What the canvas was last fitted to (CSS pixels and pixel ratio). */
+  private fitted = { w: 0, h: 0, ratio: 0 };
+  private readonly contextLost: (() => void) | undefined;
 
   constructor(
     private readonly host: HTMLElement,
     params: EngineParams,
   ) {
-    this.session = new ShiftSession(params.config);
+    this.session = params.session ?? new ShiftSession(params.config);
+    this.contextLost = params.onContextLost;
     const { level } = this.session;
     this.stepFrom = { ...this.session.player.pos };
 
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      // The scene is drawn into the post chain's own targets and smoothed there (FXAA); a
+      // multisampled canvas would only hold a full-screen copy, at four times the memory.
+      antialias: false,
       powerPreference: 'high-performance',
     });
-    this.quality = new QualityGovernor(
-      window.devicePixelRatio,
-      isSoftwareRenderer(this.renderer.getContext()),
-    );
+    this.quality = new QualityGovernor(window.devicePixelRatio, {
+      software: isSoftwareRenderer(this.renderer.getContext()),
+      last: lastQuality,
+      displayHz: displayRate.hz,
+    });
     this.renderer.setPixelRatio(this.quality.current.ratio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -182,7 +211,9 @@ export class GameEngine {
     this.scene.background = new THREE.Color(PALETTE.background);
     // Soft studio reflections so metal, chrome and glass read as shiny.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const studio = new RoomEnvironment();
+    this.envMap = pmrem.fromScene(studio, 0.04).texture;
+    studio.dispose();
     pmrem.dispose();
     this.scene.environment = this.envMap;
 
@@ -197,6 +228,7 @@ export class GameEngine {
     this.session.events.on('door:unlocked', () => {
       this.world.lights.bake();
       this.seen.invalidate();
+      this.fog.invalidate();
     });
 
     const character = CHARACTERS.get(this.session.character.id);
@@ -252,6 +284,11 @@ export class GameEngine {
     this.hands = new Hands(this.kit, character.color);
     this.eyes.camera.add(this.hands.root, this.threats.group);
     this.scene.add(this.eyes.camera);
+    // World matrices are brought up to date by hand, once a frame (see draw). Left to itself
+    // three redoes every one of them for each pass that draws the scene (the mirror, then the
+    // view), the merged scenery that never moves included.
+    this.scene.matrixAutoUpdate = false;
+    this.scene.matrixWorldAutoUpdate = false;
     this.mouse = new LookController(this.renderer.domElement, () => {
       // Esc freed the mouse; the browser kept the key press to itself, so pause here.
       this.recapture = true;
@@ -262,10 +299,20 @@ export class GameEngine {
       if (settings.view !== this.mode) this.setView(settings.view);
     });
 
-    this.resizeObserver = new ResizeObserver(() => this.resize());
+    // Only noted here and applied in the loop: resizing a canvas blanks it, so it has to happen
+    // just before a frame is drawn (never after one), and a burst of these, as a phone turns,
+    // should cost one reallocation of every render target rather than one each.
+    this.resizeObserver = new ResizeObserver(() => {
+      this.resizePending = true;
+    });
     this.resizeObserver.observe(host);
     this.applyQuality();
+    // Anything that takes the player's eyes off the game pauses it. A phone going to the home
+    // screen, another app or the lock screen hides the page without ever blurring the window.
     window.addEventListener('blur', this.onBlur);
+    window.addEventListener('pagehide', this.onBlur);
+    document.addEventListener('visibilitychange', this.onVisibility);
+    this.renderer.domElement.addEventListener('webglcontextlost', this.onContextLost);
 
     if (debugHooksEnabled()) {
       (window as unknown as { __copper?: unknown }).__copper = {
@@ -286,6 +333,8 @@ export class GameEngine {
       0,
       true,
     );
+    // The world took a while to build; the first frame's time starts now, not back then.
+    this.last = performance.now();
     this.frame = requestAnimationFrame(this.loop);
   }
 
@@ -387,7 +436,8 @@ export class GameEngine {
     this.threats.group.visible = firstPerson;
     // You don't see your own body from behind your own eyes, but it still casts its shadow.
     this.showBody(!firstPerson);
-    this.resize();
+    // Show the new view at once, even from the pause menu.
+    this.drawnAt = -Infinity;
   }
 
   /** Draw the worker's body, or leave only its shadow. */
@@ -434,15 +484,30 @@ export class GameEngine {
     if (this.session.status === 'running') useShiftStore.getState().setPaused(true);
   };
 
+  private onVisibility = () => {
+    if (document.hidden) this.onBlur();
+  };
+
+  private onContextLost = () => {
+    this.lost = true;
+    this.onBlur();
+    this.contextLost?.();
+  };
+
   private resize() {
     const w = this.host.clientWidth || 1;
     const h = this.host.clientHeight || 1;
+    const ratio = this.renderer.getPixelRatio();
+    if (w === this.fitted.w && h === this.fitted.h && ratio === this.fitted.ratio) return;
+    this.fitted = { w, h, ratio };
     this.renderer.setSize(w, h);
     this.iso.resize(w, h);
     this.eyes.resize(w, h);
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.post?.setSize(buffer.x, buffer.y);
     this.mirror.setSize(buffer.x, buffer.y);
+    // A resized canvas is blank until it's drawn again, paused or not.
+    this.drawnAt = -Infinity;
   }
 
   private loop = (now: number) => {
@@ -451,7 +516,6 @@ export class GameEngine {
     const raw = (now - this.last) / 1000;
     const dt = Math.min(0.25, raw);
     this.last = now;
-    if (this.quality.sample(raw) !== null) this.applyQuality();
 
     const store = useShiftStore.getState();
     const running = this.session.status === 'running';
@@ -486,7 +550,22 @@ export class GameEngine {
       }
     }
 
-    this.draw(dt, now / 1000);
+    if (this.resizePending) {
+      this.resizePending = false;
+      this.resize();
+    }
+    const idle = paused && running;
+    // Paused frames cost next to nothing, so they show what rate the screen is really being
+    // refreshed at (it changes: Low Power Mode, a phone running hot).
+    if (idle) displayRate.sample(raw * 1000);
+    this.quality.setDisplayRate(displayRate.hz);
+    // Only frames that were drawn for play say how well the device is keeping up.
+    if (!idle && !this.lost && this.quality.sample(raw) !== null) this.applyQuality();
+    const sinceDrawn = now - this.drawnAt;
+    if (!this.lost && (!idle || sinceDrawn >= PAUSED_FRAME_MS)) {
+      this.draw(idle ? Math.min(0.25, sinceDrawn / 1000) : dt, now / 1000);
+      this.drawnAt = now;
+    }
     this.bridge.publish(now);
   };
 
@@ -716,6 +795,8 @@ export class GameEngine {
     this.adapted += (adaptTo - this.adapted) * Math.min(1, dt * 1.6);
     const camera = firstPerson ? this.eyes.camera : this.iso.camera;
     const { effects, mirror } = this.quality.current;
+    // Everything is where it will be drawn: one pass over the scene's matrices for all passes.
+    this.scene.updateMatrixWorld();
     if (this.post && mirror) {
       // The floor's reflection, drawn first. It's the one place you see yourself in first person.
       if (firstPerson) this.showBody(true);
@@ -789,10 +870,14 @@ export class GameEngine {
 
   destroy() {
     this.destroyed = true;
+    lastQuality = this.quality.settled ?? lastQuality;
     cancelAnimationFrame(this.frame);
     window.clearTimeout(this.endTimer);
     this.resizeObserver.disconnect();
     window.removeEventListener('blur', this.onBlur);
+    window.removeEventListener('pagehide', this.onBlur);
+    document.removeEventListener('visibilitychange', this.onVisibility);
+    this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost);
     this.unwatchSettings();
     this.mouse.dispose();
     this.input.dispose();
@@ -820,8 +905,16 @@ export class GameEngine {
     this.mirror.dispose();
     this.threats.dispose();
     this.world.dispose();
+    // Hand the context and its memory back now rather than whenever the canvas is garbage
+    // collected: every shift makes a new one, and a phone allows only a few at a time. (Disposed
+    // first, so three isn't listening for a loss it would try to recover from; shrunk, because
+    // that is what releases the drawing buffer at once.)
+    const canvas = this.renderer.domElement;
     this.renderer.dispose();
-    this.renderer.domElement.remove();
+    canvas.width = 1;
+    canvas.height = 1;
+    if (!this.renderer.getContext().isContextLost()) this.renderer.forceContextLoss();
+    canvas.remove();
     const w = window as unknown as { __copper?: { engine?: unknown } };
     if (w.__copper?.engine === this) delete w.__copper;
   }

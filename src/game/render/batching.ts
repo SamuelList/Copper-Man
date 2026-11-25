@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MaterialKit } from './materials';
 
 /**
@@ -15,6 +15,11 @@ export type Cells = number | ((x: number, z: number) => string);
  * every static mesh per cell. Plain coloured materials are folded into a few vertex-coloured
  * ones (grouped by roughness and metalness), so a cell draws in a handful of calls; cells off
  * screen are still culled.
+ *
+ * The merged meshes are most of the vertices in the game, so they are kept lean: welded and
+ * indexed (a corner shared by several triangles is stored once: a rounded box comes as 144
+ * loose vertices and leaves as 26), with texture coordinates only where a texture will read
+ * them, and with the JavaScript copy of each buffer dropped once the graphics card has its own.
  */
 export function batchStatic(
   roots: readonly THREE.Object3D[],
@@ -51,7 +56,8 @@ export function batchStatic(
         bucket = { material, castShadow: mesh.castShadow, parts: [] };
         buckets.set(key, bucket);
       }
-      const piece = normalize(mesh.geometry).applyMatrix4(mesh.matrixWorld);
+      const piece = lean(mesh.geometry, textured(material)).clone();
+      piece.applyMatrix4(mesh.matrixWorld);
       if (plain) paint(piece, plain.color);
       bucket.parts.push(piece);
     });
@@ -61,8 +67,13 @@ export function batchStatic(
     const merged = mergeGeometries(parts, false);
     parts.forEach((p) => p.dispose());
     if (!merged) continue;
+    // Worked out now, while the positions are still to hand (culling needs both).
     merged.computeBoundingSphere();
     merged.computeBoundingBox();
+    for (const attribute of Object.values(merged.attributes)) {
+      if (attribute instanceof THREE.BufferAttribute) attribute.onUpload(release);
+    }
+    merged.index?.onUpload(release);
     const mesh = new THREE.Mesh(merged, material);
     mesh.castShadow = castShadow;
     mesh.receiveShadow = true;
@@ -79,17 +90,53 @@ export function batchStatic(
 export const bake = (root: THREE.Object3D, kit: MaterialKit): THREE.Group =>
   batchStatic([root], kit, Infinity);
 
-/** Same attribute set for every piece (position, normal, uv), non-indexed, so they can merge. */
-function normalize(source: THREE.BufferGeometry): THREE.BufferGeometry {
-  const g = source.index ? source.toNonIndexed() : source.clone();
+/** Once a buffer is on the graphics card nothing here reads it again: let the copy go. */
+function release(this: THREE.BufferAttribute) {
+  (this as { array: unknown }).array = null;
+}
+
+/** Does anything sample a texture through this material's texture coordinates? */
+function textured(m: THREE.Material): boolean {
+  const info = m.userData.kit as { map: boolean } | undefined;
+  if (info) return info.map;
+  const maps = m as THREE.MeshStandardMaterial;
+  return Boolean(maps.map || maps.alphaMap || maps.emissiveMap || maps.normalMap);
+}
+
+/** Each shape as the batches want it, worked out once however many times it's placed. */
+const leanShapes = new WeakMap<
+  THREE.BufferGeometry,
+  { plain?: THREE.BufferGeometry; textured?: THREE.BufferGeometry }
+>();
+
+/**
+ * A shape with the same attribute set as every other piece of its bucket (position, normal,
+ * and uv if `uv`), welded and indexed, so they can merge. Shared: clone it before moving it.
+ */
+function lean(source: THREE.BufferGeometry, uv: boolean): THREE.BufferGeometry {
+  let shapes = leanShapes.get(source);
+  if (!shapes) leanShapes.set(source, (shapes = {}));
+  const kind = uv ? 'textured' : 'plain';
+  return (shapes[kind] ??= weld(source, uv));
+}
+
+function weld(source: THREE.BufferGeometry, uv: boolean): THREE.BufferGeometry {
+  const g = source.clone();
   for (const name of Object.keys(g.attributes)) {
-    if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
+    if (name !== 'position' && name !== 'normal' && !(uv && name === 'uv')) {
+      g.deleteAttribute(name);
+    }
   }
-  const count = g.attributes.position!.count;
   if (!g.attributes.normal) g.computeVertexNormals();
-  if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(count * 2, 2));
+  if (uv && !g.attributes.uv) {
+    const count = g.attributes.position!.count;
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(count * 2, 2));
+  }
   g.clearGroups();
-  return g;
+  // Vertices that agree in every attribute become one (which also gives it an index).
+  const welded = mergeVertices(g);
+  g.dispose();
+  return welded;
 }
 
 /** Snap to a few roughness/metalness levels so similar materials share a batch. */
@@ -112,6 +159,10 @@ function plainColor(m: THREE.Material) {
 function paint(g: THREE.BufferGeometry, color: THREE.Color) {
   const count = g.attributes.position!.count;
   const data = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) data.set([color.r, color.g, color.b], i * 3);
+  for (let i = 0; i < data.length; i += 3) {
+    data[i] = color.r;
+    data[i + 1] = color.g;
+    data[i + 2] = color.b;
+  }
   g.setAttribute('color', new THREE.BufferAttribute(data, 3));
 }

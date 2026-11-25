@@ -37,6 +37,36 @@ describe('CharacterSelectScreen', () => {
     });
     expect(useAppStore.getState()).toMatchObject({ screen: 'shift', shiftNonce: 1 });
   });
+
+  it('hires on two quick taps of the same card, and only then', () => {
+    const clock = vi.spyOn(performance, 'now');
+    render(<CharacterSelectScreen />);
+    const dalton = screen.getByRole('radio', { name: /Dalton/ });
+    const dunkin = screen.getByRole('radio', { name: /Dunkin/ });
+    const screenNow = () => useAppStore.getState().screen;
+
+    // A double tap that began on the screen before (its first tap opened this one) picks a
+    // worker; it doesn't hire them.
+    clock.mockReturnValue(1000);
+    fireEvent.click(dalton, { detail: 2 });
+    fireEvent.doubleClick(dalton);
+    expect(screenNow()).toBe('title');
+    // Nor do taps on two different cards, however quick...
+    clock.mockReturnValue(1100);
+    fireEvent.click(dunkin);
+    expect(screenNow()).toBe('title');
+    expect(dunkin).toHaveAttribute('aria-checked', 'true');
+    // ...or two taps on one card with a pause between them.
+    clock.mockReturnValue(2000);
+    fireEvent.click(dunkin);
+    expect(screenNow()).toBe('title');
+    // Two in a row do.
+    clock.mockReturnValue(2200);
+    fireEvent.click(dunkin);
+    expect(screenNow()).toBe('shift');
+    expect(useCareerStore.getState().characterId).toBe('dunkin');
+    clock.mockRestore();
+  });
 });
 
 describe('ShopScreen', () => {
@@ -239,6 +269,39 @@ describe('Hud', () => {
     fireEvent.pointerUp(zone, { pointerId: 7 });
     fireEvent.pointerMove(zone, { pointerId: 7, clientX: 700, clientY: 195 });
     expect(virtualInput.takeLook()).toEqual({ x: 0, y: 0 });
+  });
+
+  it('lets go of every control when the game goes into the background', () => {
+    useInputMode.setState({ mode: 'touch' });
+    render(<Hud />);
+    act(() => useShiftStore.getState().setSnapshot(snapshot));
+    const sprint = screen.getByRole('button', { name: 'Sprint' });
+    const stick = screen.getByTestId('joystick');
+    fireEvent.pointerDown(sprint, { pointerId: 1 });
+    fireEvent.pointerDown(stick, { pointerId: 2, clientX: 50, clientY: 300 });
+    fireEvent.pointerMove(stick, { pointerId: 2, clientX: 90, clientY: 300 });
+    expect(virtualInput.sprint).toBe(true);
+    expect(virtualInput.stickX).toBeGreaterThan(0.5);
+    expect(sprint).toHaveAttribute('data-held', 'true');
+
+    // Another app comes to the front. The thumbs lift, and nothing ever says so.
+    const setHidden = (hidden: boolean) => {
+      Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    setHidden(true);
+    expect(virtualInput.sprint).toBe(false);
+    expect(virtualInput.stickX).toBe(0);
+    expect(sprint).toHaveAttribute('data-held', 'false');
+
+    // Back again: the stick answers a new thumb rather than waiting on the old one.
+    setHidden(false);
+    expect(virtualInput.stickX).toBe(0);
+    fireEvent.pointerDown(stick, { pointerId: 3, clientX: 50, clientY: 300 });
+    fireEvent.pointerMove(stick, { pointerId: 3, clientX: 50, clientY: 260 });
+    expect(virtualInput.stickY).toBeGreaterThan(0.5);
+    fireEvent.pointerUp(stick, { pointerId: 3 });
+    Reflect.deleteProperty(document, 'hidden');
   });
 
   it('shows toasts and the end-of-shift banner', () => {

@@ -22,6 +22,15 @@
   --shadow: 0 8px 30px rgb(0 0 0 / 0.45);
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Arial Black', 'Helvetica Neue', Impact, system-ui, sans-serif;
+  /*
+   * Room to leave at each edge of the screen for a phone's status bar, sensor housing and home
+   * indicator. Everything pinned to an edge uses these rather than env() directly, so a host
+   * page that already keeps the game clear of an edge can set that one to 0.
+   */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
   color-scheme: dark;
 }
 
@@ -46,6 +55,8 @@ body,
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Menus scroll, but a double tap never zooms the page (Safari ignores user-scalable=no). */
+  touch-action: manipulation;
 }
 
 body {

@@ -54,7 +54,11 @@ export class InputController {
   constructor(private readonly target: Window = window) {
     target.addEventListener('keydown', this.onKeyDown);
     target.addEventListener('keyup', this.onKeyUp);
+    // A key or thumb let go while the game isn't in front never reports it. On a phone that
+    // means the page being hidden (another app, the lock screen), which doesn't blur the window.
     target.addEventListener('blur', this.onBlur);
+    target.addEventListener('pagehide', this.onBlur);
+    target.document.addEventListener('visibilitychange', this.onVisibility);
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -82,6 +86,10 @@ export class InputController {
   private onBlur = () => {
     this.held.clear();
     virtualInput.reset();
+  };
+
+  private onVisibility = () => {
+    if (this.target.document.hidden) this.onBlur();
   };
 
   private down(...codes: string[]) {
@@ -150,5 +158,7 @@ export class InputController {
     this.target.removeEventListener('keydown', this.onKeyDown);
     this.target.removeEventListener('keyup', this.onKeyUp);
     this.target.removeEventListener('blur', this.onBlur);
+    this.target.removeEventListener('pagehide', this.onBlur);
+    this.target.document.removeEventListener('visibilitychange', this.onVisibility);
   }
 }

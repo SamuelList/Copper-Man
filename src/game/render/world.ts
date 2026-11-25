@@ -491,13 +491,16 @@ export function buildWorld(
     },
     setShadows(size) {
       sun.castShadow = size > 0;
-      if (size > 0 && size !== sun.shadow.mapSize.x) {
-        sun.shadow.mapSize.set(size, size);
+      // A map of the wrong size, or one no longer wanted, gives its memory back straight away.
+      if (size === 0 || size !== sun.shadow.mapSize.x) {
         sun.shadow.map?.dispose();
         sun.shadow.map = null;
       }
+      if (size > 0) sun.shadow.mapSize.set(size, size);
     },
     dispose() {
+      // The light owns its shadow map, which nothing else frees.
+      sun.dispose();
       lights.dispose();
       floorSurface.dispose();
       wallDetail.dispose();

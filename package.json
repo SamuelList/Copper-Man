@@ -2,7 +2,7 @@
   "name": "copper-man",
   "private": true,
   "version": "0.1.0",
-  "description": "Project Copper — a top-down stealth RPG about scrapping copper without getting caught by the boss.",
+  "description": "Project Copper \u2014 a top-down stealth RPG about scrapping copper without getting caught by the boss.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:artifact": "node scripts/build-artifact.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",

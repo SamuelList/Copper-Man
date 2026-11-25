@@ -40,6 +40,18 @@ export default defineConfig({
         launchOptions: { executablePath, args: ['--enable-unsafe-swiftshader'] },
       },
     },
+    {
+      // The single-file build inside a stand-in for the frame it's published in, on a phone
+      // held upright. It builds and serves its own page, so the web server below is unused.
+      name: 'artifact',
+      testMatch: 'artifact.spec.ts',
+      use: {
+        ...devices['iPhone 13'],
+        browserName: 'chromium',
+        deviceScaleFactor: 2,
+        launchOptions: { executablePath, args: ['--enable-unsafe-swiftshader'] },
+      },
+    },
   ],
   webServer: {
     command: `npm run build && npx vite preview --port ${PORT} --strictPort`,

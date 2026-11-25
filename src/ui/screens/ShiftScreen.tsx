@@ -10,6 +10,7 @@ import { useShiftStore } from '@state/shiftStore';
 import { useCallback, useState } from 'react';
 import { Button, Kbd, Panel } from '../components';
 import { ViewSwitch } from '../components/ViewSwitch';
+import { useWakeLock } from '../hooks/useWakeLock';
 import { Hud } from '../hud/Hud';
 import styles from './screens.module.css';
 
@@ -62,6 +63,9 @@ export function ShiftScreen() {
   const go = useAppStore((s) => s.go);
   const applyShiftResult = useCareerStore((s) => s.applyShiftResult);
   const paused = useShiftStore((s) => s.paused);
+  const over = useShiftStore((s) => s.result !== null);
+  // Lying low takes patience; the phone shouldn't lock while the player waits.
+  useWakeLock(!paused && !over);
 
   // Built once per mount (App keys this screen by shift), so the game never restarts mid-shift.
   const [config] = useState<ShiftConfig>(() => {

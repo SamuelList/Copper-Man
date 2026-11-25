@@ -1,4 +1,4 @@
-import { BALANCE } from '@core/content/balance';
+import { BALANCE, TILE_SIZE } from '@core/content/balance';
 import type { ShiftSession } from '@core/session/ShiftSession';
 import type { ExploredMap } from '@core/systems/exploration';
 import { visibilityOutline } from '@core/systems/vision';
@@ -10,6 +10,8 @@ import { toWorld } from './coords';
 const RES = 6;
 /** Remembered-but-out-of-sight is drawn at this level; unexplored is 0, in sight is 1. */
 const REMEMBERED = 0.5;
+/** Moving less than this (a quarter of a fog texel) can't change the picture. */
+const MOVED = TILE_SIZE / RES / 4;
 
 /**
  * The player's fog of war, in three states: never seen (pitch black), seen before (greyed
@@ -23,6 +25,8 @@ export class FogOfWar {
   private readonly canvas: HTMLCanvasElement;
   private readonly memory: HTMLCanvasElement;
   private readonly memoryCtx: CanvasRenderingContext2D;
+  /** Where the player stood when the fog was last drawn; null means draw it whatever. */
+  private from: Vec2 | null = null;
 
   constructor(cols: number, rows: number, explored: ExploredMap) {
     this.canvas = document.createElement('canvas');
@@ -46,8 +50,23 @@ export class FogOfWar {
     this.texture.minFilter = THREE.LinearFilter;
   }
 
+  /** What the player can see has changed without them moving (a door came open). */
+  invalidate() {
+    this.from = null;
+  }
+
+  /**
+   * Bring the fog up to date. Most frames of a stealth game are spent standing still (waiting
+   * for someone to pass, working on a fixture), and then there is nothing to do: the view is
+   * only worked out, painted and sent to the graphics card again when it could have changed.
+   */
   update(session: ShiftSession) {
     const { ctx, canvas } = this;
+    const fresh = session.explored.takeFresh();
+    const at = session.player.pos;
+    const still = this.from !== null && Math.hypot(at.x - this.from.x, at.y - this.from.y) < MOVED;
+    if (still && fresh.length === 0) return;
+    this.from = { x: at.x, y: at.y };
     const outline = visibilityOutline(
       session.grid,
       session.grid.sightCorners,
@@ -59,7 +78,7 @@ export class FogOfWar {
     // whose tops lie outside the outline itself.
     const cols = session.explored.cols;
     this.memoryCtx.fillStyle = '#fff';
-    for (const i of session.explored.takeFresh()) {
+    for (const i of fresh) {
       this.memoryCtx.fillRect((i % cols) * RES, Math.floor(i / cols) * RES, RES, RES);
     }
 

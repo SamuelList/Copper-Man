@@ -90,9 +90,13 @@ export function turn<T extends THREE.Object3D>(o: T, x = 0, y = 0, z = 0): T {
   return o;
 }
 
+/**
+ * Free the shared shapes' buffers on the graphics card. The shapes themselves are kept: the
+ * next shift is made of the same ones, and working them out again (the rounded boxes
+ * especially) was a good part of the wait before it starts.
+ */
 export function disposeModelCache() {
   geoCache.forEach((g) => g.dispose());
-  geoCache.clear();
 }
 
 /** A small canvas texture (labels, screens, posters). Cached by key. */
