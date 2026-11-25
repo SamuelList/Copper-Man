@@ -48,6 +48,12 @@ export interface SurfaceOptions {
   /** Painted concrete blocks on vertical faces. */
   blocks?: boolean;
   /**
+   * Tile-sized blocks drawn as instances (the walls). Each instance says in `aJoined` which of
+   * its sides are pressed against a neighbour that covers them (1: +x, 2: -x, 4: +z, 8: -z,
+   * added up), and those faces aren't drawn.
+   */
+  joined?: boolean;
+  /**
    * Share of the room's light the surface gives back whichever way it faces: light bounced off
    * the floor, which is all a ceiling ever gets.
    */
@@ -78,6 +84,9 @@ export interface SurfacePatch {
 const VERTEX_DECL = /* glsl */ `
 varying vec3 vCopperPos;
 varying vec3 vCopperNormal;
+#ifdef COPPER_JOINED
+  attribute float aJoined;
+#endif
 `;
 
 const VERTEX_BODY = /* glsl */ `
@@ -91,6 +100,14 @@ vec3 copperNormal = objectNormal;
 copperWorld = modelMatrix * copperWorld;
 vCopperPos = copperWorld.xyz;
 vCopperNormal = normalize( mat3( modelMatrix ) * copperNormal );
+#ifdef COPPER_JOINED
+  // A side pressed against a neighbour can't be seen, but drawn it glints through the joint
+  // wherever a pixel lands exactly on the seam. Collapse it off screen instead.
+  float copperSide = normal.x > 0.5 ? 1.0 : normal.x < -0.5 ? 2.0 : normal.z > 0.5 ? 4.0 : normal.z < -0.5 ? 8.0 : 0.0;
+  if ( copperSide > 0.0 && mod( floor( aJoined / copperSide ), 2.0 ) > 0.5 ) {
+    gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );
+  }
+#endif
 `;
 
 const FRAGMENT_DECL = /* glsl */ `
@@ -169,10 +186,13 @@ export function shadeWithWorld<T extends THREE.Material>(
     options.bounce ? `#define COPPER_BOUNCE ${glslFloat(options.bounce)}` : '',
   ].join('\n');
   const patch = options.patch;
+  const vertexDefines = options.joined ? '#define COPPER_JOINED\n' : '';
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, shading, patch?.uniforms);
     shader.vertexShader =
-      VERTEX_DECL + shader.vertexShader.replace('#include <project_vertex>', VERTEX_BODY);
+      vertexDefines +
+      VERTEX_DECL +
+      shader.vertexShader.replace('#include <project_vertex>', VERTEX_BODY);
     shader.fragmentShader =
       `${defines}\n${FRAGMENT_DECL}\n${patch?.declarations ?? ''}\n` +
       shader.fragmentShader
@@ -185,7 +205,8 @@ export function shadeWithWorld<T extends THREE.Material>(
           FRAGMENT_BODY.replace('COPPER_LIGHT', patch?.light ?? ''),
         );
   };
-  const key = `copper:${reach}:${options.blocks ? 1 : 0}:${options.bounce ?? 0}:${patch?.key ?? ''}`;
+  const flags = `${options.blocks ? 1 : 0}${options.joined ? 1 : 0}`;
+  const key = `copper:${reach}:${flags}:${options.bounce ?? 0}:${patch?.key ?? ''}`;
   material.customProgramCacheKey = () => key;
   return material;
 }
@@ -267,16 +288,17 @@ export class MaterialKit {
 
   /**
    * Painted block wall. Each face takes its light from the room it looks into, and carries the
-   * block relief (which stays put in world space as walls sink out of the way).
+   * block relief (which stays put in world space as walls sink out of the way). `joined` is for
+   * instanced wall blocks that say which of their sides are covered (see `SurfaceOptions`).
    */
-  wall(color: number, roughness: number) {
-    const key = `wall:${color}:${roughness}`;
+  wall(color: number, roughness: number, joined = false) {
+    const key = `wall:${color}:${roughness}:${joined}`;
     let m = this.cache.get(key);
     if (!m) {
       m = shadeWithWorld(
         new THREE.MeshStandardMaterial({ color, roughness, flatShading: true }),
         this.shading,
-        { reach: 0.55, blocks: true },
+        { reach: 0.55, blocks: true, joined },
       );
       this.cache.set(key, m);
     }

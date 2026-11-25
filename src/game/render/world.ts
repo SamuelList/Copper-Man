@@ -44,6 +44,12 @@ const SHADOW_EXTENT = 14;
 const SHADOW_MAP = 2048;
 /** Direction the sun shines from (relative to what it lights). */
 const SUN_OFFSET = new THREE.Vector3(-18, 34, -22);
+/**
+ * Even light, as a multiple of the environment's intensity, that makes a frame drawn without
+ * the environment as bright as one drawn with it (measured in both views, in lit and dark
+ * rooms and outdoors).
+ */
+const ENVIRONMENT_LIGHT = 4.5;
 
 /**
  * Instanced walls that lower themselves when they would hide the player, with a painted
@@ -55,6 +61,10 @@ export class WallCutaway {
   private readonly cols: Int16Array;
   private readonly rows: Int16Array;
   private readonly heights: Float32Array;
+  /** Per wall, the walls to its +x, -x, +z and -z (-1 for none). */
+  private readonly neighbours: Int32Array;
+  /** Per wall, which of those sides are covered by a neighbour at least as tall (bit flags). */
+  private readonly joined: THREE.InstancedBufferAttribute;
   private readonly byTile = new Map<string, number>();
   private readonly decor = new Map<number, THREE.Object3D[]>();
   private readonly matrix = new THREE.Matrix4();
@@ -65,7 +75,7 @@ export class WallCutaway {
   constructor(tiles: { col: number; row: number }[], kit: MaterialKit) {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     geometry.translate(0, 0.5, 0);
-    const side = kit.wall(PALETTE.wallSide, 0.9);
+    const side = kit.wall(PALETTE.wallSide, 0.9, true);
     const top = kit.get(PALETTE.wallTop, { roughness: 0.9 });
     // BoxGeometry groups: +x, -x, +y (top), -y, +z, -z
     this.mesh = new THREE.InstancedMesh(
@@ -79,7 +89,7 @@ export class WallCutaway {
     dadoGeometry.translate(0, 0.5, 0);
     this.dado = new THREE.InstancedMesh(
       dadoGeometry,
-      kit.wall(PALETTE.wallDado, 0.55),
+      kit.wall(PALETTE.wallDado, 0.55, true),
       tiles.length,
     );
     this.dado.receiveShadow = true;
@@ -87,9 +97,40 @@ export class WallCutaway {
     this.rows = Int16Array.from(tiles.map((t) => t.row));
     this.heights = new Float32Array(tiles.length).fill(WALL_HEIGHT);
     tiles.forEach((t, i) => this.byTile.set(`${t.col},${t.row}`, i));
+    const at = (col: number, row: number) => this.byTile.get(`${col},${row}`) ?? -1;
+    this.neighbours = Int32Array.from(
+      tiles.flatMap((t) => [
+        at(t.col + 1, t.row),
+        at(t.col - 1, t.row),
+        at(t.col, t.row + 1),
+        at(t.col, t.row - 1),
+      ]),
+    );
+    this.joined = new THREE.InstancedBufferAttribute(new Float32Array(tiles.length), 1);
+    geometry.setAttribute('aJoined', this.joined);
+    dadoGeometry.setAttribute('aJoined', this.joined);
     for (let i = 0; i < tiles.length; i++) this.write(i);
+    this.join();
     this.mesh.instanceMatrix.needsUpdate = true;
     this.dado.instanceMatrix.needsUpdate = true;
+  }
+
+  /**
+   * Work out which sides of each wall are hidden against a neighbour. A wall that has sunk
+   * leaves the taller one beside it with a face showing, so this follows the heights.
+   */
+  private join() {
+    const flags = this.joined.array;
+    for (let i = 0; i < flags.length; i++) {
+      const h = this.heights[i]! - 0.001;
+      let covered = 0;
+      for (let side = 0; side < 4; side++) {
+        const n = this.neighbours[i * 4 + side]!;
+        if (n >= 0 && this.heights[n]! >= h) covered |= 1 << side;
+      }
+      flags[i] = covered;
+    }
+    this.joined.needsUpdate = true;
   }
 
   /** Hang something on a wall tile so it sinks with the wall. */
@@ -150,6 +191,7 @@ export class WallCutaway {
       changed = true;
     }
     if (changed) {
+      this.join();
       this.mesh.instanceMatrix.needsUpdate = true;
       this.dado.instanceMatrix.needsUpdate = true;
     }
@@ -368,6 +410,10 @@ export function buildWorld(
 
   // Lighting: soft sky fill + a warm key light whose shadows follow the view.
   scene.add(new THREE.HemisphereLight(0xe3ecff, 0x40362c, 0.95));
+  // The studio environment lights the scene as well as reflecting in it. A device that goes
+  // without it (see QualityGovernor) gets the same light from here, minus the reflections.
+  const standIn = new THREE.AmbientLight(0xffffff, 0);
+  scene.add(standIn);
   const sun = new THREE.DirectionalLight(0xfff0dc, 2.2);
   sun.castShadow = true;
   sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
@@ -419,6 +465,7 @@ export function buildWorld(
         Math.sin(time * 3.3) * 0.1;
       fire.emissiveIntensity = GLOW * (0.7 + flicker * 0.6);
       if (glow) glow.intensity = 3.2 + flicker * 2;
+      standIn.intensity = scene.environment ? 0 : ENVIRONMENT_LIGHT * scene.environmentIntensity;
       outdoors.update(time);
     },
     setFirstPerson(on) {
