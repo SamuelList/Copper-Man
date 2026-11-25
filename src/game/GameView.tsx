@@ -82,6 +82,8 @@ export function GameView({ config, onShiftEnd, onReady, className }: Props) {
               stopWaiting();
               replaceEngine();
             };
+            // (A context can be given back and taken again before anyone returns.)
+            stopWaiting();
             document.addEventListener('visibilitychange', onVisible);
             stopWaiting = () => document.removeEventListener('visibilitychange', onVisible);
           },

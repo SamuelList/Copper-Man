@@ -192,6 +192,8 @@ export class GameEngine {
   private fitted = { w: 0, h: 0, ratio: 0 };
   private readonly contextLost: (() => void) | undefined;
   private firstFrame: (() => void) | undefined;
+  /** The display rate last passed to the governor (it's only told when the measurement changes). */
+  private fedHz = 60;
 
   constructor(
     private readonly host: HTMLElement,
@@ -212,9 +214,15 @@ export class GameEngine {
     this.quality = new QualityGovernor(window.devicePixelRatio, {
       ladder: isPhone() ? PHONE_QUALITY : QUALITY,
       software: isSoftwareRenderer(this.renderer.getContext()),
-      last: lastQuality,
+      // A new shift starts a level better than the last one ended. An engine taking over a
+      // shift in progress stays where that shift was (the governor's step up, undone).
+      last:
+        params.session && lastQuality
+          ? { ...lastQuality, level: lastQuality.level + 1 }
+          : lastQuality,
       displayHz: displayRate.hz,
     });
+    this.fedHz = displayRate.hz;
     this.renderer.setPixelRatio(this.quality.current.ratio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -545,9 +553,12 @@ export class GameEngine {
 
     const store = useShiftStore.getState();
     const running = this.session.status === 'running';
-    if (this.input.pausePressed() && running) store.togglePause();
+    // An engine that can no longer draw must not play on unseen: it stays paused, whatever
+    // is pressed, until another takes over.
+    const pausePressed = this.input.pausePressed();
+    if (pausePressed && running && !this.lost) store.togglePause();
     if (this.input.viewPressed() && running) useSettings.getState().toggleView();
-    const paused = useShiftStore.getState().paused;
+    const paused = useShiftStore.getState().paused || this.lost;
     const firstPerson = this.mode === 'fps';
     this.shareMouse(paused || !running);
     // Always drained, so a drag made while paused doesn't spin you round on resume.
@@ -584,7 +595,12 @@ export class GameEngine {
     // Paused frames cost next to nothing, so they show what rate the screen is really being
     // refreshed at (it changes: Low Power Mode, a phone running hot).
     if (idle) displayRate.sample(raw * 1000);
-    this.quality.setDisplayRate(displayRate.hz);
+    // Passed on only when it has been measured afresh: the governor also corrects its own idea
+    // of the rate from what it sees in play, and repeating an old measurement would undo that.
+    if (displayRate.hz !== this.fedHz) {
+      this.fedHz = displayRate.hz;
+      this.quality.setDisplayRate(this.fedHz);
+    }
     // Only frames that were drawn for play say how well the device is keeping up.
     if (!idle && !this.lost && this.quality.sample(raw) !== null) this.applyQuality();
     const sinceDrawn = now - this.drawnAt;

@@ -147,9 +147,12 @@ const SURFACE_BODY = /* glsl */ `
   // Each vertex brings its own finish (the material's own roughness and metalness are 1).
   roughnessFactor *= vCopperSurface.x;
   metalnessFactor *= vCopperSurface.y;
-  // Faceted pieces take the true normal of the triangle, as three's flat shading does.
+  // Faceted pieces take the true normal of the triangle, as three's flat shading does. (Both
+  // of them: the unperturbed one is what highlights are widened by where a surface curves, and
+  // a flat face doesn't.)
   if ( vCopperSurface.z > 0.5 ) {
     normal = normalize( cross( dFdx( vViewPosition ), dFdy( vViewPosition ) ) );
+    nonPerturbedNormal = normal;
   }
 #endif
 #ifdef COPPER_BLOCKS

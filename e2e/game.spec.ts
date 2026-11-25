@@ -14,7 +14,10 @@ interface DebugWindow {
       boss: { pos: { x: number; y: number }; mode: string };
       bag: { capacity: number; contents: Record<string, number> };
       vanBoxes: { minX: number; maxX: number; minY: number; maxY: number }[];
+      doors: { id: string; locked: boolean }[];
     };
+    /** The renderer's side of things (only what the tests look at). */
+    engine: { world: { doors: { id: string; open: number }[] } };
     /** Which camera is in use, and where first person is looking. */
     view(): { mode: 'iso' | 'fps'; yaw: number; pitch: number };
     /** Hold the renderer at one quality level (0 is best; out of range means lowest). */
@@ -122,23 +125,27 @@ test('a full day: hire, sneak, sprint, sell, clock out, shop, next day', async (
   const lostAt = await page.evaluate(() => {
     const copper = (window as DebugWindow).__copper!;
     (window as { shiftBefore?: unknown }).shiftBefore = copper.session;
+    // A door opened earlier in the shift has to still be there, open, afterwards.
+    const door = copper.session.doors.find((d) => d.locked)!;
+    door.locked = false;
     const canvas = document.querySelector('canvas')!;
     canvas.dataset.lost = 'yes';
     canvas.getContext('webgl2')!.getExtension('WEBGL_lose_context')!.loseContext();
-    return { elapsed: copper.session.elapsed, x: copper.session.player.pos.x };
+    return { elapsed: copper.session.elapsed, x: copper.session.player.pos.x, door: door.id };
   });
   await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
   await expect(page.locator('canvas:not([data-lost])')).toBeVisible();
   await expect(page.locator('canvas[data-lost]')).toHaveCount(0);
   await waitForSession(page);
-  const carriedOn = await page.evaluate(() => {
+  const carriedOn = await page.evaluate((doorId) => {
     const copper = (window as DebugWindow).__copper!;
     return {
       sameShift: copper.session === (window as { shiftBefore?: unknown }).shiftBefore,
       x: copper.session.player.pos.x,
+      doorOpen: copper.engine.world.doors.find((d) => d.id === doorId)?.open,
     };
-  });
-  expect(carriedOn).toEqual({ sameShift: true, x: lostAt.x });
+  }, lostAt.door);
+  expect(carriedOn).toEqual({ sameShift: true, x: lostAt.x, doorOpen: 1 });
   await page.getByRole('button', { name: 'Resume' }).click();
   await expect
     .poll(() => page.evaluate(() => (window as DebugWindow).__copper!.session.elapsed), {

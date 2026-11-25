@@ -398,8 +398,11 @@ export function buildWorld(
   }
 
   // Locked doors span the gap between their two wall neighbours (they swing, so no batching).
+  // Every door the level locks gets one, whether or not it still is: an engine that takes over
+  // a shift in progress finds some already opened, and they stand open rather than vanish.
+  const lockable = new Set(level.doors.filter((d) => d.locked).map((d) => d.id));
   const doors: DoorView[] = session.doors
-    .filter((d) => d.locked)
+    .filter((d) => lockable.has(d.id))
     .map((d) => {
       const { root, leaf } = buildLockedDoor(kit, d.security);
       root.position.set(d.tile.col + 0.5, 0, d.tile.row + 0.5);
@@ -410,7 +413,7 @@ export function buildWorld(
       scene.add(root);
       const { col, row } = d.tile;
       cullable.push({ object: root, col0: col - 1, row0: row - 1, col1: col + 1, row1: row + 1 });
-      return { id: d.id, root, leaf, open: 0 };
+      return { id: d.id, root, leaf, open: d.locked ? 0 : 1 };
     });
 
   for (const hung of hangDecor(level, walls, kit, scene)) {

@@ -1,4 +1,4 @@
-import { BALANCE, TILE_SIZE } from '@core/content/balance';
+import { BALANCE } from '@core/content/balance';
 import type { ShiftSession } from '@core/session/ShiftSession';
 import type { ExploredMap } from '@core/systems/exploration';
 import { visibilityOutline } from '@core/systems/vision';
@@ -10,8 +10,6 @@ import { toWorld } from './coords';
 const RES = 6;
 /** Remembered-but-out-of-sight is drawn at this level; unexplored is 0, in sight is 1. */
 const REMEMBERED = 0.5;
-/** Moving less than this (a quarter of a fog texel) can't change the picture. */
-const MOVED = TILE_SIZE / RES / 4;
 
 /**
  * The player's fog of war, in three states: never seen (pitch black), seen before (greyed
@@ -64,7 +62,8 @@ export class FogOfWar {
     const { ctx, canvas } = this;
     const fresh = session.explored.takeFresh();
     const at = session.player.pos;
-    const still = this.from !== null && Math.hypot(at.x - this.from.x, at.y - this.from.y) < MOVED;
+    // Exactly still: beside a corner even the smallest step swings the edge of what's in view.
+    const still = this.from !== null && at.x === this.from.x && at.y === this.from.y;
     if (still && fresh.length === 0) return;
     this.from = { x: at.x, y: at.y };
     const outline = visibilityOutline(
