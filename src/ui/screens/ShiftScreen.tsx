@@ -9,7 +9,7 @@ import { useSettings } from '@state/settingsStore';
 import { useShiftStore } from '@state/shiftStore';
 import { useCallback, useState } from 'react';
 import { Button, Kbd, Panel } from '../components';
-import { ViewSwitch } from '../components/ViewSwitch';
+import { LookSpeedSwitch, ViewSwitch } from '../components/ViewSwitch';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { Hud } from '../hud/Hud';
 import styles from './screens.module.css';
@@ -36,6 +36,7 @@ function PauseOverlay() {
           Clock out early
         </Button>
         <ViewSwitch fill />
+        {firstPerson && <LookSpeedSwitch fill />}
         {touch ? (
           <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
             Drag on the left to walk. Hold 🏃 to sprint and ✋ to scrap, unlock and sell. Tap

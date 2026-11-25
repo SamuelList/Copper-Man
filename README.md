@@ -11,17 +11,18 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-| Script              | What it does                                   |
-| ------------------- | ---------------------------------------------- |
-| `npm run dev`       | Vite dev server with HMR                       |
-| `npm run build`     | Type-check and build to `dist/`                |
-| `npm run preview`   | Serve the production build                     |
-| `npm test`          | Unit + component tests (Vitest)                |
-| `npm run e2e`       | Playwright end-to-end test (builds + previews) |
-| `npm run lint`      | ESLint, including architecture-boundary rules  |
-| `npm run typecheck` | `tsc -b`                                       |
-| `npm run format`    | Prettier                                       |
-| `npm run check`     | lint + typecheck + test + build (what CI runs) |
+| Script                   | What it does                                                   |
+| ------------------------ | -------------------------------------------------------------- |
+| `npm run dev`            | Vite dev server with HMR                                       |
+| `npm run build`          | Type-check and build to `dist/`                                |
+| `npm run build:artifact` | The whole game as one HTML file, for sharing as a link (below) |
+| `npm run preview`        | Serve the production build                                     |
+| `npm test`               | Unit + component tests (Vitest)                                |
+| `npm run e2e`            | Playwright end-to-end tests (builds + previews)                |
+| `npm run lint`           | ESLint, including architecture-boundary rules                  |
+| `npm run typecheck`      | `tsc -b`                                                       |
+| `npm run format`         | Prettier                                                       |
+| `npm run check`          | lint + typecheck + test + build (what CI runs)                 |
 
 > Running e2e in a container with a preinstalled Chromium? Point Playwright at it:
 > `PLAYWRIGHT_CHROMIUM_PATH=/path/to/chromium npm run e2e`
@@ -47,7 +48,13 @@ npm run dev        # http://localhost:5173
 - Hold the 🏃 button next to it to sprint. Its ring is your stamina. The ✨ ability button's ring shows its charge. Gadgets sit above them.
 - The eye button in the top bar switches to first person; drag anywhere on the right half to look around. Tap it again (it shows a diorama block) to go back.
 
-Landscape is roomiest, but portrait works too (the bar takes two rows). `?touch` forces touch controls on a desktop.
+Landscape is roomiest, but portrait works too (the bar takes two rows). `?touch` forces touch controls on a desktop. The pause menu has the camera switch and, in first person, how fast a drag turns you.
+
+The game is built to be left and come back to on a phone. It pauses when you switch apps or lock the screen, keeps the screen awake while you play (lying low takes a while), and if the phone takes the graphics away while it's in the background, the same shift carries on, paused, when you return.
+
+### Playing from a link
+
+`npm run build:artifact` writes `dist-artifact/project-copper.html`: the whole game in one file with nothing to fetch, made to be published as a [Claude artifact](https://claude.ai) and opened on a phone. It's a page fragment (the host supplies the `<html>` around it) that fills the frame it's given, and it leaves the top and bottom safe-area insets to the host, which already pads for them. Progress is saved in that page's own storage where there is any, and the game plays without it where there isn't.
 
 ### Graphics
 
@@ -58,7 +65,7 @@ The picture is rendered in high dynamic range and finished in screen space:
 - **Post-processing.** Ambient occlusion, bloom on anything that glows, filmic tone mapping, a colour grade and vignette, film grain and anti-aliasing. Exposure adapts like eyes do: step into a dark room and it opens up over a second or two. Top-down adds a tilt-shift blur toward the top and bottom of the screen for the miniature look; a chase pulses the edge of the screen red.
 - **First person** puts the roof on: ceilings with glowing fittings, a sky with drifting clouds, trees out to a hazy horizon, your own hands and wrench, your shadow, and your reflection in the floor.
 
-It all scales with the device. If the frame rate drops, the game sheds resolution first, then mirrored floors and the heavier post-processing, then reflections, and finally shadows and post-processing altogether.
+It all scales with the device. If the frame rate drops, a computer sheds resolution first, then mirrored floors and the heavier post-processing, then reflections, and finally shadows and post-processing altogether. A phone gives up the mirrored floor first and keeps its sharpness longer: what it runs short of is draw calls, not pixels. The frame rate is judged against what the screen is really being refreshed at, so a phone that Low Power Mode holds to 30 frames a second keeps everything.
 
 ## How it plays
 
@@ -143,13 +150,16 @@ src/
     ai/        bossBrain (plans rounds, heat memory, search), studentBrain, teacherBrain, custodianBrain, navigation
     level/     ASCII level format + validator, levels/ (school map)
     session/   ShiftSession + types
-  state/       careerStore, settingsStore, shiftStore, appStore, inputMode, virtualInput (touch → game), messages
+  state/       careerStore, settingsStore, shiftStore, appStore, inputMode, virtualInput (touch → game),
+               displayRate (the screen's real refresh rate), messages
   game/        GameView.tsx, GameEngine, input/ (keys + touch, mouse look), bridge
     render/    cameras (iso, first person), world, models/, batching, gait, materials, fog, cones, markers,
                lighting + lightBaker (baked light), floorTexture (floor layers), floorMirror (reflections),
-               interior + outdoors (ceilings, sky), occlusion (first-person culling), hands, threats, post/
-  ui/          App, screens/, hud/, components/
-e2e/           Playwright tests
+               interior + outdoors (ceilings, sky), occlusion (first-person culling), hands, threats,
+               shadowFit (shadows only where the view looks), quality (the ladders and governor), post/
+  ui/          App, screens/, hud/, components/, hooks/ (wake lock, display-rate probe)
+scripts/       gen-school-map.py, build-artifact.mjs
+e2e/           Playwright tests: desktop, a phone on its side, and the one-file build on an upright phone
 ```
 
 ### Extending the game

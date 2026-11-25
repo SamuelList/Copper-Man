@@ -237,10 +237,21 @@
 
 .pauseBox {
   min-width: min(360px, 90vw);
+  /* A phone on its side is short: the menu scrolls inside the screen rather than off it. */
+  max-height: calc(100% - 1rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 0.75rem;
   text-align: center;
+}
+
+.pauseBox > * {
+  flex-shrink: 0;
 }
 
 .statsGrid {

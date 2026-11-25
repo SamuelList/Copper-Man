@@ -72,6 +72,9 @@ body {
 button {
   font: inherit;
   touch-action: manipulation;
+  /* A long press is a hold, not the start of selecting the label. */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 :focus-visible {

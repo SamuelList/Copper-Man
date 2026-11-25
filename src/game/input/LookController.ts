@@ -1,10 +1,14 @@
 import { useInputMode } from '@state/inputMode';
+import { LOOK_SPEEDS, useSettings } from '@state/settingsStore';
 import { virtualInput } from '@state/virtualInput';
 
-/** Radians turned per pixel of mouse movement. */
+/** Radians turned per pixel of mouse movement (at the normal look speed). */
 const MOUSE_SENSITIVITY = 0.0023;
-/** Radians turned per CSS pixel of a finger dragged across the look area. */
-const TOUCH_SENSITIVITY = 0.0055;
+/**
+ * Radians turned per CSS pixel of a finger dragged across the look area: a comfortable sweep
+ * of the thumb (about 3 cm, 190 px on a phone) turns you some 70 degrees.
+ */
+const TOUCH_SENSITIVITY = 0.0065;
 
 /**
  * Looking around in first person. A click on the game captures the mouse (pointer lock), after
@@ -68,9 +72,10 @@ export class LookController {
   /** Look movement since the last call: radians to the right and radians up. */
   take(): { x: number; y: number } {
     const touch = virtualInput.takeLook();
+    const speed = LOOK_SPEEDS[useSettings.getState().lookSpeed].scale;
     const look = {
-      x: this.dx * MOUSE_SENSITIVITY + touch.x * TOUCH_SENSITIVITY,
-      y: -(this.dy * MOUSE_SENSITIVITY + touch.y * TOUCH_SENSITIVITY),
+      x: (this.dx * MOUSE_SENSITIVITY + touch.x * TOUCH_SENSITIVITY) * speed,
+      y: -(this.dy * MOUSE_SENSITIVITY + touch.y * TOUCH_SENSITIVITY) * speed,
     };
     this.dx = 0;
     this.dy = 0;

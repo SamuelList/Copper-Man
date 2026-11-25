@@ -9,26 +9,42 @@ export const VIEW_NAMES: Record<ViewMode, string> = {
   fps: 'First person',
 };
 
+/** How fast looking around turns you in first person, by thumb or by mouse. */
+export type LookSpeed = 'slow' | 'normal' | 'fast';
+
+export const LOOK_SPEEDS: Record<LookSpeed, { name: string; scale: number }> = {
+  slow: { name: 'Slow', scale: 0.65 },
+  normal: { name: 'Normal', scale: 1 },
+  fast: { name: 'Fast', scale: 1.5 },
+};
+
 export interface SettingsData {
   view: ViewMode;
+  lookSpeed: LookSpeed;
 }
 
 interface SettingsStore extends SettingsData {
   setView(view: ViewMode): void;
   toggleView(): void;
+  setLookSpeed(lookSpeed: LookSpeed): void;
 }
 
 export const SETTINGS_KEY = 'copper-man/settings';
-export const SETTINGS_VERSION = 1;
+export const SETTINGS_VERSION = 2;
 
-const defaults = (): SettingsData => ({ view: 'iso' });
+const defaults = (): SettingsData => ({ view: 'iso', lookSpeed: 'normal' });
 
 /** Anything unrecognised in an old or hand-edited save falls back to the default. */
 export function migrateSettings(persisted: unknown): SettingsData {
-  const data = (
-    persisted && typeof persisted === 'object' ? persisted : {}
-  ) as Partial<SettingsData>;
-  return { view: data.view === 'fps' ? 'fps' : 'iso' };
+  const data = (persisted && typeof persisted === 'object' ? persisted : {}) as Partial<
+    Record<keyof SettingsData, unknown>
+  >;
+  return {
+    view: data.view === 'fps' ? 'fps' : 'iso',
+    lookSpeed:
+      Object.keys(LOOK_SPEEDS).find((speed): speed is LookSpeed => speed === data.lookSpeed) ??
+      'normal',
+  };
 }
 
 const noopStorage: StateStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -57,13 +73,14 @@ export const createSettingsStore = (storage: () => StateStorage = safeLocalStora
         ...defaults(),
         setView: (view) => set({ view }),
         toggleView: () => set((s) => ({ view: s.view === 'iso' ? 'fps' : 'iso' })),
+        setLookSpeed: (lookSpeed) => set({ lookSpeed }),
       }),
       {
         name: SETTINGS_KEY,
         version: SETTINGS_VERSION,
         storage: createJSONStorage(storage),
         migrate: migrateSettings,
-        partialize: (s) => ({ view: s.view }),
+        partialize: (s) => ({ view: s.view, lookSpeed: s.lookSpeed }),
       },
     ),
   );

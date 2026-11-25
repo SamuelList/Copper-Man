@@ -8,7 +8,7 @@ import { useSettings } from '@state/settingsStore';
 import { useShiftStore } from '@state/shiftStore';
 import { virtualInput } from '@state/virtualInput';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { ViewSwitch } from './components/ViewSwitch';
+import { LookSpeedSwitch, ViewSwitch } from './components/ViewSwitch';
 import { Hud } from './hud/Hud';
 import { CharacterSelectScreen } from './screens/CharacterSelectScreen';
 import { ShiftSummaryScreen } from './screens/ShiftSummaryScreen';
@@ -19,7 +19,7 @@ beforeEach(() => {
   useAppStore.setState({ screen: 'title', shiftNonce: 0 });
   useShiftStore.getState().reset();
   useInputMode.setState({ mode: 'keyboard', mouseLook: false });
-  useSettings.setState({ view: 'iso' });
+  useSettings.setState({ view: 'iso', lookSpeed: 'normal' });
   virtualInput.reset();
 });
 afterEach(cleanup);
@@ -260,7 +260,10 @@ describe('Hud', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch to first person view' }));
     const zone = screen.getByTestId('look-zone');
+    // Nothing on screen shows that half can be dragged, so it says so until it has been.
+    expect(zone).toHaveTextContent('Drag here to look around');
     fireEvent.pointerDown(zone, { pointerId: 7, clientX: 600, clientY: 200 });
+    expect(zone).toBeEmptyDOMElement();
     fireEvent.pointerMove(zone, { pointerId: 7, clientX: 630, clientY: 190 });
     fireEvent.pointerMove(zone, { pointerId: 7, clientX: 640, clientY: 195 });
     // Another finger (on the stick, say) doesn't turn your head.
@@ -335,6 +338,17 @@ describe('Hud', () => {
       }),
     );
     expect(screen.getByTestId('end-banner')).toHaveTextContent("YOU'RE FIRED!");
+  });
+});
+
+describe('LookSpeedSwitch', () => {
+  it('picks how fast looking around turns you', () => {
+    render(<LookSpeedSwitch />);
+    expect(screen.getByRole('radio', { name: 'Normal' })).toBeChecked();
+    fireEvent.click(screen.getByRole('radio', { name: 'Fast' }));
+    expect(useSettings.getState().lookSpeed).toBe('fast');
+    expect(screen.getByRole('radio', { name: 'Fast' })).toBeChecked();
+    expect(screen.getByRole('radiogroup', { name: 'Look speed' })).toBeInTheDocument();
   });
 });
 

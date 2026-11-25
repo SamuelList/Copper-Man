@@ -2,6 +2,7 @@ import { BALANCE } from '@core/content/balance';
 import { NPCS } from '@core/content/npcs';
 import { useAppStore } from '@state/appStore';
 import { useCareerStore } from '@state/careerStore';
+import { useInputMode } from '@state/inputMode';
 import { Button, Panel } from '../components';
 import { ViewSwitch } from '../components/ViewSwitch';
 import { money } from '../format';
@@ -11,6 +12,8 @@ export function TitleScreen() {
   const go = useAppStore((s) => s.go);
   const { active, fired, day, cash, level } = useCareerStore();
   const canContinue = active && !fired;
+  // Say it the way this player will do it: thumbs on a phone, keys at a desk.
+  const touch = useInputMode((s) => s.mode === 'touch');
 
   return (
     <main className={[styles.screen, styles.center].join(' ')}>
@@ -38,9 +41,15 @@ export function TitleScreen() {
         <h2>How to play</h2>
         <ul>
           <li>
-            <strong>Scrap fixtures</strong> — fountains, heaters, toilets, lamps. Hold{' '}
-            <strong>E</strong> (or the hand button on a phone) next to one. Hallways pay more;
-            classrooms are safer.
+            <strong>Scrap fixtures</strong> — fountains, heaters, toilets, lamps.{' '}
+            {touch ? (
+              <>Stand next to one and hold the ✋ button.</>
+            ) : (
+              <>
+                Hold <strong>E</strong> next to one.
+              </>
+            )}{' '}
+            Hallways pay more; classrooms are safer.
           </li>
           <li>
             <strong>Sell at the van.</strong> Scrap only counts once it&apos;s in the van. Your bag
@@ -79,8 +88,17 @@ export function TitleScreen() {
           </li>
           <li>
             <strong>Pick your view.</strong> Watch the school from above, or go first person and
-            sneak the halls through your own eyes. Switch any time with <strong>V</strong> (or the
-            eye button).
+            sneak the halls through your own eyes.{' '}
+            {touch ? (
+              <>
+                Switch any time with the button beside pause; in first person, drag the right side
+                of the screen to look around.
+              </>
+            ) : (
+              <>
+                Switch any time with <strong>V</strong> (or the eye button).
+              </>
+            )}
           </li>
         </ul>
       </Panel>

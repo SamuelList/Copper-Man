@@ -1,7 +1,17 @@
-import { useSettings, VIEW_NAMES, type ViewMode } from '@state/settingsStore';
-import styles from './components.module.css';
+import {
+  LOOK_SPEEDS,
+  useSettings,
+  VIEW_NAMES,
+  type LookSpeed,
+  type ViewMode,
+} from '@state/settingsStore';
+import { Segmented } from './Segmented';
 
-const VIEWS = Object.keys(VIEW_NAMES) as ViewMode[];
+const VIEWS = (Object.keys(VIEW_NAMES) as ViewMode[]).map((id) => ({ id, name: VIEW_NAMES[id] }));
+const SPEEDS = (Object.keys(LOOK_SPEEDS) as LookSpeed[]).map((id) => ({
+  id,
+  name: LOOK_SPEEDS[id].name,
+}));
 
 /**
  * Choose the camera: the top-down diorama or first person. Remembered between sessions.
@@ -10,25 +20,21 @@ const VIEWS = Object.keys(VIEW_NAMES) as ViewMode[];
 export function ViewSwitch({ fill = false }: { fill?: boolean }) {
   const view = useSettings((s) => s.view);
   const setView = useSettings((s) => s.setView);
+  return <Segmented label="Camera" options={VIEWS} value={view} onChange={setView} fill={fill} />;
+}
+
+/** How fast a drag of the thumb (or the mouse) turns you in first person. Remembered too. */
+export function LookSpeedSwitch({ fill = false }: { fill?: boolean }) {
+  const speed = useSettings((s) => s.lookSpeed);
+  const setSpeed = useSettings((s) => s.setLookSpeed);
   return (
-    <div
-      className={styles.tabs}
-      style={fill ? { width: '100%' } : undefined}
-      role="radiogroup"
-      aria-label="Camera"
-    >
-      {VIEWS.map((id) => (
-        <button
-          key={id}
-          type="button"
-          role="radio"
-          aria-checked={id === view}
-          className={[styles.tab, id === view && styles.tabActive].filter(Boolean).join(' ')}
-          onClick={() => setView(id)}
-        >
-          {VIEW_NAMES[id]}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label="Look speed"
+      caption="Look"
+      options={SPEEDS}
+      value={speed}
+      onChange={setSpeed}
+      fill={fill}
+    />
   );
 }

@@ -4,6 +4,7 @@ import { virtualInput } from '@state/virtualInput';
 import {
   useEffect,
   useRef,
+  useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -169,12 +170,15 @@ function Joystick() {
  */
 function LookZone() {
   const active = useRef<{ id: number; x: number; y: number } | null>(null);
+  /** Until it's been done once, say how: nothing on screen shows this half can be dragged. */
+  const [found, setFound] = useState(false);
 
   const onDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (active.current) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     active.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    setFound(true);
   };
 
   const onMove = (e: ReactPointerEvent) => {
@@ -201,7 +205,9 @@ function LookZone() {
       onPointerCancel={onUp}
       onLostPointerCapture={onUp}
       data-testid="look-zone"
-    />
+    >
+      {!found && <span className={styles.lookHint}>Drag here to look around</span>}
+    </div>
   );
 }
 

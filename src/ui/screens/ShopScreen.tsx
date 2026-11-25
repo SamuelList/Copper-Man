@@ -8,6 +8,7 @@ import { scrapOdds } from '@core/systems/scrapping';
 import { canBuyConsumable, canPurchase, discounted, type PurchaseCheck } from '@core/systems/shop';
 import { useAppStore } from '@state/appStore';
 import { careerStats, useCareerStore } from '@state/careerStore';
+import { useInputMode } from '@state/inputMode';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Button, Hearts, LevelBadge, Panel, Tabs } from '../components';
 import { css, money, pct, units } from '../format';
@@ -184,11 +185,13 @@ function GearTab({ discount }: { discount: number }) {
 
 function GadgetsTab({ discount }: { discount: number }) {
   const { cash, inventory, buyConsumable } = useCareerStore();
+  const touch = useInputMode((s) => s.mode === 'touch');
   return (
     <>
       <p className={styles.tabIntro}>
-        One-use tricks for the next shift. Tap them on the HUD (or press 1, 2, 3). Whatever you
-        don&apos;t use, you keep.
+        One-use tricks for the next shift.{' '}
+        {touch ? 'Tap one above your thumb to use it.' : 'Press 1, 2 or 3 (or click one).'} Whatever
+        you don&apos;t use, you keep.
       </p>
       <div className={styles.shopGrid}>
         {CONSUMABLES.all.map((c) => {
