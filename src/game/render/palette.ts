@@ -45,7 +45,7 @@ export const PALETTE = {
 
 /** Floor colours per room kind: [base, accent]. */
 export const FLOORS: Record<RoomKind | 'doorway', [number, number]> = {
-  exterior: [0x3a3d42, 0x45494f],
+  exterior: [0x494c51, 0x54585e],
   hallway: [0xd8d2c4, 0xc4bcab],
   classroom: [0xb98c5a, 0xa57a4c],
   restroom: [0xe3eaec, 0xbfcbd0],

@@ -1,6 +1,6 @@
 # Project Copper
 
-A 2.5D **stealth RPG** built with React, Three.js, and TypeScript, seen through a fixed axonometric (isometric) camera. You work school maintenance: strip copper,
+A **stealth RPG** built with React, Three.js, and TypeScript. Play it as a 2.5D diorama through a fixed axonometric (isometric) camera, or switch to **first person** and sneak the halls through your own eyes. You work school maintenance: strip copper,
 brass, aluminum, and steel scrap out of the building, haul it to your van, and sell it. Don't let **Mr. Gravy** (the
 boss) catch you red-handed. Three warnings and you're fired.
 
@@ -28,22 +28,37 @@ npm run dev        # http://localhost:5173
 
 ### Controls
 
-| Key           | Action                                |
-| ------------- | ------------------------------------- |
-| WASD / arrows | Move (relative to the screen)         |
-| Shift         | Sprint (stamina, and it's loud)       |
-| E / Space     | **Hold** to scrap, unlock, sell, wake |
-| Q             | Character ability                     |
-| 1 / 2 / 3     | Use a gadget                          |
-| Esc           | Pause / clock out early               |
+| Key           | Action                                             |
+| ------------- | -------------------------------------------------- |
+| WASD / arrows | Move (relative to the screen)                      |
+| Shift         | Sprint (stamina, and it's loud)                    |
+| E / Space     | **Hold** to scrap, unlock, sell, wake              |
+| Q             | Character ability                                  |
+| 1 / 2 / 3     | Use a gadget                                       |
+| V             | Switch between top-down and first person           |
+| Esc           | Pause / clock out early (and pick the camera here) |
+
+**In first person** WASD walks where you look. Click the game to capture the mouse and look around with it (Esc lets it go); the left and right arrows turn too, so a keyboard alone is enough. You face, throw and reach wherever you look: with two fixtures in reach, the one you're looking at is the one you scrap. An arc around the crosshair shows who is noticing you and from which side (the bottom of the ring is behind you).
 
 **On a phone or tablet** the HUD switches to thumb controls as soon as you touch the screen, and shrinks to one slim bar of glass chips across the top (clock and light gem, bag, who's noticed you, cash/hearts/XP, pause) so most of the screen is the school:
 
 - Drag anywhere on the left half to walk. Ease off the stick to walk slowly.
 - Hold the big hand button to scrap, unlock, sell or wake. It shows the action, and its ring fills as you work.
 - Hold the 🏃 button next to it to sprint. Its ring is your stamina. The ✨ ability button's ring shows its charge. Gadgets sit above them.
+- The eye button in the top bar switches to first person; drag anywhere on the right half to look around. Tap it again (it shows a diorama block) to go back.
 
 Landscape is roomiest, but portrait works too (the bar takes two rows). `?touch` forces touch controls on a desktop.
+
+### Graphics
+
+The picture is rendered in high dynamic range and finished in screen space:
+
+- **Baked light.** Every ceiling lamp, boiler fire, desk lamp and lit doorway is a pool of coloured light that stops at walls, baked on the GPU into one light map over the floor plan. Unlock a door and the hallway's light spills into the dark room behind it. A room's _level_ of light still comes from the game rules (it's what the HUD's light gem shows); the bake only decides where in the room it falls.
+- **Materials.** Each kind of room has its own floor (waxed linoleum, planks, ceramic tile with grout, carpet, concrete, asphalt) with its own relief and gloss, sharp from a hand's width away. Glossy floors reflect the room, lamps and people included. Walls are painted block.
+- **Post-processing.** Ambient occlusion, bloom on anything that glows, filmic tone mapping, a colour grade and vignette, film grain and anti-aliasing. Top-down adds a tilt-shift blur toward the top and bottom of the screen for the miniature look; a chase pulses the edge of the screen red.
+- **First person** puts the roof on: ceilings with glowing fittings, a sky with drifting clouds, trees out to a hazy horizon, your own hands and wrench, your shadow, and your reflection in the floor.
+
+It all scales with the device. If the frame rate drops, the game sheds resolution first, then mirrored floors and the heavier post-processing, then reflections, and finally shadows and post-processing altogether.
 
 ## How it plays
 
@@ -112,12 +127,12 @@ React    Three.js   Zustand     pure TypeScript
 
 Dependencies only point right, and ESLint enforces it (`no-restricted-imports` in `eslint.config.js`).
 
-| Layer           | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`src/core`**  | Game rules and content, with no Three.js, React, or DOM. `ShiftSession` is the authoritative simulation: it takes `tick(dt, input)`, exposes state to draw, and emits typed events. AI, vision (exact visibility outlines, cover, light), pathfinding, and collision are plain functions, so they're unit-tested headless. Furniture and fixtures collide and block sight with their real `footprint`, not their whole tile; the player is a circle that slides along walls and sidesteps objects wedged against them. |
-| **`src/state`** | Zustand stores. `careerStore` is persisted to localStorage with a versioned schema and `migrate`. `shiftStore` is the HUD mirror. `appStore` is the screen state machine. `virtualInput` carries the on-screen touch controls to the game's input controller.                                                                                                                                                                                                                                                          |
-| **`src/game`**  | Three.js renderer and input. `GameEngine` steps the session on a fixed 60 Hz timestep and draws it with a fixed isometric `IsoCamera`. Room light and fog of war are map-space textures applied to every material by one shader patch (`render/materials.ts`). `bridge.ts` pushes session events and throttled snapshots into `shiftStore`. Static scenery is batched into a few meshes per map chunk, and `QualityGovernor` lowers resolution, then reflections, then shadows if a device can't hold the frame rate.  |
-| **`src/ui`**    | React screens and HUD. It mounts `<GameView />` and never imports Three.js directly. HUD widgets subscribe to narrow slices of the store with `useShallow`.                                                                                                                                                                                                                                                                                                                                                            |
+| Layer           | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`src/core`**  | Game rules and content, with no Three.js, React, or DOM. `ShiftSession` is the authoritative simulation: it takes `tick(dt, input)`, exposes state to draw, and emits typed events. AI, vision (exact visibility outlines, cover, light), pathfinding, and collision are plain functions, so they're unit-tested headless. Furniture and fixtures collide and block sight with their real `footprint`, not their whole tile; the player is a circle that slides along walls and sidesteps objects wedged against them.                                                                                                      |
+| **`src/state`** | Zustand stores. `careerStore` is persisted to localStorage with a versioned schema and `migrate`. `settingsStore` remembers the camera (kept apart from the career, so it survives a new one). `shiftStore` is the HUD mirror. `appStore` is the screen state machine. `virtualInput` carries the on-screen touch controls to the game's input controller.                                                                                                                                                                                                                                                                  |
+| **`src/game`**  | Three.js renderer and input. `GameEngine` steps the session on a fixed 60 Hz timestep and draws it through either camera: the fixed isometric `IsoCamera` or the `FirstPersonCamera`. Baked light and fog of war are map-space textures applied to every material by one shader patch (`render/materials.ts`); `render/post/PostFX.ts` is the post-processing chain. `bridge.ts` pushes session events and throttled snapshots into `shiftStore`. Static scenery is batched per room, first person skips rooms it can't see into, and `QualityGovernor` sheds resolution and effects if a device can't hold the frame rate. |
+| **`src/ui`**    | React screens and HUD. It mounts `<GameView />` and never imports Three.js directly. HUD widgets subscribe to narrow slices of the store with `useShallow`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ```
 src/
@@ -128,8 +143,11 @@ src/
     ai/        bossBrain (plans rounds, heat memory, search), studentBrain, teacherBrain, custodianBrain, navigation
     level/     ASCII level format + validator, levels/ (school map)
     session/   ShiftSession + types
-  state/       careerStore, shiftStore, appStore, inputMode, virtualInput (touch → game), messages
-  game/        GameView.tsx, GameEngine, render/ (camera, world, models/, batching, gait, materials, fog, cones, markers), input/, bridge
+  state/       careerStore, settingsStore, shiftStore, appStore, inputMode, virtualInput (touch → game), messages
+  game/        GameView.tsx, GameEngine, input/ (keys + touch, mouse look), bridge
+    render/    cameras (iso, first person), world, models/, batching, gait, materials, fog, cones, markers,
+               lighting + lightBaker (baked light), floorTexture (floor layers), floorMirror (reflections),
+               interior + outdoors (ceilings, sky), occlusion (first-person culling), hands, threats, post/
   ui/          App, screens/, hud/, components/
 e2e/           Playwright tests
 ```
@@ -147,11 +165,14 @@ e2e/           Playwright tests
 | A level         | Write a map in `core/level/levels/` (legend in `asciiLevel.ts`) and register it in `levels/index.ts`. `validateLevel` runs in tests and catches unreachable fixtures or broken patrols. A Tiled loader can return the same `LevelDef`.                                       |
 | Real art        | Swap a builder in `game/render/models/` for one that clones a loaded glTF scene. Every model is looked up by content id.                                                                                                                                                     |
 | A save field    | Add it to `CareerData`, bump `SAVE_VERSION`, and add a step to `migrateCareer`.                                                                                                                                                                                              |
+| A kind of room  | Add it to `RoomKind` and `BALANCE.light.byRoomKind` in core, then give it a floor (`FLOORS` in `palette.ts`, a pattern, relief and surface in `floorTexture.ts`) and lamps (`STYLE` in `lighting.ts`). TypeScript points at each one you've missed.                          |
+| A light source  | Lamps come from a room's kind (`STYLE` in `game/render/lighting.ts`). To make a fixture or prop glow, add its id to `GLOWING` there; give its model an `emissive` material and it blooms too.                                                                                |
+| A look          | Each camera's grade (exposure, bloom, ambient occlusion, tint, vignette, tilt-shift) is one entry in `game/render/looks.ts`.                                                                                                                                                 |
 | Balance changes | Everything numeric lives in `core/content/balance.ts`.                                                                                                                                                                                                                       |
 
 ### Debugging
 
-Open the game with `?debug` (always on in dev) to expose the live session as `window.__copper.session`. You can teleport the player, fill the bag, move the boss, and so on. The e2e test uses it.
+Open the game with `?debug` (always on in dev) to expose the live session as `window.__copper.session`. You can teleport the player, fill the bag, move the boss, and so on. The e2e test uses it. `window.__copper.view()` reports the camera in use and where first person is looking, and `window.__copper.quality(n)` holds the renderer at one quality level (0 is best) instead of adapting.
 
 ## Design assumptions to confirm
 

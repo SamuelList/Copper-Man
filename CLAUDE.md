@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Project Copper is a 2.5D stealth RPG built with React 19, Three.js (fixed isometric camera), Zustand, and TypeScript (Vite).
+Project Copper is a stealth RPG built with React 19, Three.js, Zustand, and TypeScript (Vite). It has two views of the same shift: a 2.5D diorama through a fixed isometric camera, and first person.
 
 ## Commands
 
@@ -15,7 +15,7 @@ Project Copper is a 2.5D stealth RPG built with React 19, Three.js (fixed isomet
 
 - `src/core` is pure TypeScript: no Three.js, React, or Zustand. All game rules live here, and `ShiftSession` is the single source of truth for a shift.
 - `src/state` holds Zustand stores and may import only `core`.
-- `src/game` holds the Three.js rendering and input. `GameEngine` stays thin: it feeds input to the session and draws its state. Don't put rules here (line of sight, cover and light math live in `core/systems`).
+- `src/game` holds the Three.js rendering and input. `GameEngine` stays thin: it feeds input to the session and draws its state through whichever camera is in use. Don't put rules here (line of sight, cover and light math live in `core/systems`).
 - `src/ui` is React. It never imports `three`; it mounts `@game/GameView`.
 
 ## Conventions
@@ -27,12 +27,18 @@ Project Copper is a 2.5D stealth RPG built with React 19, Three.js (fixed isomet
 - Scrap outcomes (botched / rough / clean / bonus) come from `systems/scrapping.ts`: a roll shifted by `efficiency` (gear, Craftsman skills, the worker's repair on that fixture). Tune the bands in `BALANCE.scrapping.outcome`.
 - Balance numbers belong only in `core/content/balance.ts`.
 - New mechanics get unit tests in `core`. The pattern to copy is `ShiftSession.test.ts` driving a tiny ASCII map from `core/test/helpers.ts`.
-- Persisted save changes need a `SAVE_VERSION` bump plus a `migrateCareer` step.
+- Persisted save changes need a `SAVE_VERSION` bump plus a `migrateCareer` step. Preferences that aren't progress (the camera) live in `state/settingsStore` instead, with their own key and `migrateSettings`.
 - Gear and skills share one `Modifiers` shape; `deriveStats` folds them into `EffectiveStats`. Add a modifier there rather than special-casing an item id in the session.
 - Every control must work by touch as well as keyboard. Touch UI writes to `state/virtualInput`; `InputController` merges it with the keys.
+- The view (`ViewMode` in `state/settingsStore`) switches at any time: `V`, the HUD's eye button, the pause menu. Both views must keep working: anything only one of them shows goes through `World.setFirstPerson`, and each has its own grade in `render/looks.ts`.
+- First person gives core a look direction: `PlayerInput.aim` (facing, gadget throws and which target you reach for follow it). Mouse look is `input/LookController` (pointer lock, drag as a fallback); the arrow keys turn too, and touch drags the HUD's look zone. The first-person math (`render/lookMath.ts`) is pure and unit-tested.
 - Phones get their own compact HUD (`ui/hud/TouchBar` chips plus `TouchControls`); the desktop cards stay in `Hud.tsx`. Both read the shift through the shared selectors in `ui/hud/hooks.ts`.
-- Models are built procedurally in `game/render/models/` (fixtures, props, set pieces, wall decor, characters), keyed by content id, so placeholder art can be swapped for glTF later. Build each one to its content `footprint`, which is also its hitbox. Lit materials go through `MaterialKit` so they pick up room light and fog of war.
-- Static scenery is merged by `game/render/batching.ts` (per map chunk, plain colours folded into vertex colours) to keep draw calls low on phones. Anything that moves (doors, characters, effects) stays out of the batch.
+- Models are built procedurally in `game/render/models/` (fixtures, props, set pieces, wall decor, characters), keyed by content id, so placeholder art can be swapped for glTF later. Build each one to its content `footprint`, which is also its hitbox. Lit materials go through `MaterialKit` so they pick up baked light and fog of war; a material's `emissive` is drawn brighter than white (it blooms) and isn't dimmed by a dark room.
+- Light is baked, not computed per frame: `render/lighting.ts` lays out lamps, glowing props and door spill from the level (pure, unit-tested), and `LightBaker` draws them into the light map every material samples. Core's room `light` level stays the rule; the bake only spreads it around the room. Tune lamps per room kind in `STYLE` there.
+- The floor is `render/floorTexture.ts`: one repeating layer per room kind (colour, relief, gloss) plus a paint map for what doesn't repeat. A new `RoomKind` needs an entry in each table there, in `FLOORS` and in `lighting.ts`.
+- Post-processing is `render/post/PostFX.ts` (HDR scene, ambient occlusion, bloom, grade, FXAA). `QualityGovernor` decides how much of it a device gets; add any costly effect to its ladder rather than switching it on unconditionally.
+- Markers and effects drawn over the world (sprites, cones, rings) take `asOverlay` on their material and `onOverlay` on their object, so ambient occlusion and the floor's reflection leave them alone.
+- Static scenery is merged by `game/render/batching.ts` (per room, plain colours folded into vertex colours) to keep draw calls low on phones. Anything that moves (doors, characters, effects) stays out of the batch. First person only draws rooms it can see into (`render/occlusion.ts`), so new scenery belongs in a batch or registers itself for culling in `world.ts`.
 - Characters share one jointed rig (`buildCharacter` plus a `RigSpec` outfit). `game/render/gait.ts` animates it from measured ground speed; the gait math is pure and unit-tested.
 - Path aliases: `@core/*`, `@state/*`, `@game/*`, `@ui/*`.
-- `?debug` exposes `window.__copper.session` for e2e tests and manual tinkering.
+- `?debug` exposes `window.__copper.session` for e2e tests and manual tinkering, plus `view()` (camera and look direction) and `quality(n)` (hold one quality level).

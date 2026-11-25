@@ -33,6 +33,13 @@ export interface PlayerInput {
   ability: boolean;
   /** Gadget used this frame (consumable id). */
   use?: string | null;
+  /**
+   * Where the player is looking (a heading in radians, like `facing`), when the view has a look
+   * direction of its own: first person. The worker faces that way whatever their feet are
+   * doing, gadgets are thrown that way, and what you look at is what you reach for. Leave it
+   * out and the worker faces wherever they walk.
+   */
+  aim?: number | null;
 }
 
 export interface PlayerState {

@@ -3,19 +3,30 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MaterialKit } from './materials';
 
 /**
+ * Which batch something goes in, from where it stands (world x, z): the size of a square grid
+ * of chunks, or a function naming its cell (the world batches by room, so a room the camera
+ * can't see into can be skipped whole).
+ */
+export type Cells = number | ((x: number, z: number) => string);
+
+/**
  * Static batching. The procedural models are dozens of small meshes each; drawn one by one, a
  * school full of them costs thousands of draw calls, which phones can't afford. This merges
- * every static mesh per map chunk. Plain coloured materials are folded into a few
- * vertex-coloured ones (grouped by roughness and metalness), so a chunk draws in a handful of
- * calls; chunks off screen are still culled.
+ * every static mesh per cell. Plain coloured materials are folded into a few vertex-coloured
+ * ones (grouped by roughness and metalness), so a cell draws in a handful of calls; cells off
+ * screen are still culled.
  */
 export function batchStatic(
   roots: readonly THREE.Object3D[],
   kit: MaterialKit,
-  chunkSize = 8,
+  cells: Cells = 8,
 ): THREE.Group {
   const out = new THREE.Group();
   out.name = 'static-batch';
+  const cellOf =
+    typeof cells === 'number'
+      ? (x: number, z: number) => `${Math.floor(x / cells)},${Math.floor(z / cells)}`
+      : cells;
   const buckets = new Map<
     string,
     { material: THREE.Material; castShadow: boolean; parts: THREE.BufferGeometry[] }
@@ -25,7 +36,7 @@ export function batchStatic(
   for (const root of roots) {
     root.updateMatrixWorld(true);
     anchor.setFromMatrixPosition(root.matrixWorld);
-    const chunk = `${Math.floor(anchor.x / chunkSize)},${Math.floor(anchor.z / chunkSize)}`;
+    const chunk = cellOf(anchor.x, anchor.z);
     root.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh || Array.isArray(mesh.material)) return;
@@ -51,6 +62,7 @@ export function batchStatic(
     parts.forEach((p) => p.dispose());
     if (!merged) continue;
     merged.computeBoundingSphere();
+    merged.computeBoundingBox();
     const mesh = new THREE.Mesh(merged, material);
     mesh.castShadow = castShadow;
     mesh.receiveShadow = true;

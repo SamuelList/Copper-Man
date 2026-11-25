@@ -30,6 +30,11 @@ export const BALANCE = {
     staminaRegenDelay: 0.75,
     /** How close (from the edge of the object) you must be to interact with it. */
     reach: TILE_SIZE * 0.85,
+    /**
+     * When you have a look direction (first person), each radian a thing is off to the side
+     * counts like this much extra distance when choosing what you reach for.
+     */
+    aimWeight: TILE_SIZE * 1.2,
     caughtGraceSeconds: 3,
     /** How far the player can see (fog of war). */
     sightRange: TILE_SIZE * 16,

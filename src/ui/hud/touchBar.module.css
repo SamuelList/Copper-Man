@@ -6,8 +6,8 @@
   left: max(8px, env(safe-area-inset-left));
   right: max(8px, env(safe-area-inset-right));
   display: grid;
-  grid-template-columns: auto auto 1fr auto auto;
-  grid-template-areas: 'shift bag detect status pause';
+  grid-template-columns: auto auto 1fr auto auto auto;
+  grid-template-areas: 'shift bag detect status view pause';
   align-items: center;
   gap: 6px;
   pointer-events: none;
@@ -208,7 +208,7 @@
   font-size: 11px;
 }
 
-/* ---- Pause ---- */
+/* ---- Switch view, pause ---- */
 
 .bar > button {
   grid-area: pause;
@@ -221,13 +221,22 @@
   backdrop-filter: blur(12px) saturate(140%);
 }
 
+.bar > button[data-action='view'] {
+  grid-area: view;
+}
+
+.bar > button svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Portrait phones: two rows (clock + cash on top, bag + detection below). */
 @media (max-width: 560px) {
   .bar {
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto 1fr auto auto auto;
     grid-template-areas:
-      'shift shift status pause'
-      'bag detect detect detect';
+      'shift shift status view pause'
+      'bag detect detect detect detect';
   }
 
   .detect {

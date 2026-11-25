@@ -13,7 +13,7 @@ import {
   useShiftClock,
   useStatus,
 } from './hooks';
-import { PauseButton, XpCounter } from './widgets';
+import { PauseButton, ViewButton, XpCounter } from './widgets';
 import styles from './touchBar.module.css';
 
 const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(' ');
@@ -151,6 +151,7 @@ export function TouchBar() {
       <BagChip />
       <DetectionChip />
       <StatusChip />
+      <ViewButton />
       <PauseButton />
     </div>
   );

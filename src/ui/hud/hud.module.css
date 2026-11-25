@@ -378,6 +378,76 @@
   box-sizing: border-box;
 }
 
+.pause svg {
+  display: block;
+}
+
+/* Pause and switch-view, stacked beside the status card. */
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pause[data-action='view'] {
+  position: relative;
+}
+
+.keyHint {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: var(--text-dim);
+}
+
+/* ---- First person: a dot to aim with, and how to look around ---- */
+
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.75);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
+  transition:
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+
+.crosshair[data-state='ready'] {
+  background: var(--copper-bright);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.45),
+    0 0 0 7px rgb(240 160 75 / 0.28),
+    0 0 14px rgb(240 160 75 / 0.6);
+}
+
+.crosshair[data-state='blocked'] {
+  background: rgb(255 255 255 / 0.4);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.45),
+    0 0 0 6px rgb(255 255 255 / 0.12);
+}
+
+.lookHint {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 34px);
+  transform: translateX(-50%);
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  background: rgb(14 16 20 / 0.72);
+  border: 1px solid #ffffff1a;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
 /* ---- Touch layout: the top bar (TouchBar) and thumb controls; these tuck the rest away ---- */
 
 .hud[data-touch] {

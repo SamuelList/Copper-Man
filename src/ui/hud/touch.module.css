@@ -18,6 +18,17 @@
   touch-action: none;
 }
 
+/* First person: the right half is for looking around (the buttons sit on top of it). */
+.lookZone {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 50%;
+  top: 22%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
 .stickBase {
   position: absolute;
   left: calc(max(16px, env(safe-area-inset-left)) + 56px);

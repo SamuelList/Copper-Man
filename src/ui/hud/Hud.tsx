@@ -11,6 +11,7 @@ import {
   lightLabel,
   useBag,
   useDetection,
+  useFirstPerson,
   useLight,
   useShiftClock,
   useStatus,
@@ -19,7 +20,7 @@ import {
 import styles from './hud.module.css';
 import { TouchBar } from './TouchBar';
 import { GadgetTray, TouchControls } from './TouchControls';
-import { PauseButton, XpCounter } from './widgets';
+import { Crosshair, LookHint, PauseButton, ViewButton, XpCounter } from './widgets';
 
 function TimerCard() {
   const { timeLeft, day, roomName } = useShiftClock();
@@ -281,12 +282,17 @@ function VisibilityCard() {
   );
 }
 
-function Controls() {
+function Controls({ firstPerson }: { firstPerson: boolean }) {
   return (
     <div className={styles.controls}>
       <span>
         <Kbd>WASD</Kbd> move
       </span>
+      {firstPerson && (
+        <span>
+          <Kbd>Mouse</Kbd> look
+        </span>
+      )}
       <span>
         <Kbd>E</Kbd> hold to interact
       </span>
@@ -297,6 +303,9 @@ function Controls() {
         <Kbd>1</Kbd>
         <Kbd>2</Kbd>
         <Kbd>3</Kbd> gadgets
+      </span>
+      <span>
+        <Kbd>V</Kbd> view
       </span>
       <span>
         <Kbd>Esc</Kbd> pause
@@ -335,10 +344,12 @@ function EndBanner() {
 /** HUD overlay. Each card subscribes to just the slice it renders to keep re-renders cheap. */
 export function Hud() {
   const touch = useTouch();
+  const firstPerson = useFirstPerson();
   if (touch) {
     // Phones: a slim bar on top and thumb controls below, so the school gets the screen.
     return (
       <div className={styles.hud} data-testid="hud" data-touch>
+        {firstPerson && <Crosshair />}
         <TouchBar />
         <Toasts />
         <div className={styles.bottomCenter}>
@@ -351,6 +362,8 @@ export function Hud() {
   }
   return (
     <div className={styles.hud} data-testid="hud">
+      {firstPerson && <Crosshair />}
+      {firstPerson && <LookHint />}
       <div className={styles.topLeft}>
         <TimerCard />
       </div>
@@ -360,13 +373,16 @@ export function Hud() {
       <div className={styles.topRight}>
         <div className={styles.row} style={{ alignItems: 'flex-start' }}>
           <StatusCard />
-          <PauseButton />
+          <div className={styles.buttons}>
+            <PauseButton />
+            <ViewButton showKey />
+          </div>
         </div>
       </div>
       <Toasts />
       <div className={styles.bottomLeft}>
         <BagCard />
-        <Controls />
+        <Controls firstPerson={firstPerson} />
       </div>
       <div className={styles.bottomCenter}>
         <PromptCard />

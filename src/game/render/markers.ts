@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { onOverlay } from './layers';
+import { asOverlay } from './materials';
 import { PALETTE } from './palette';
 
 /** Billboarded text glyph ("!", "?", "z Z z") drawn once into a canvas texture. */
@@ -23,11 +25,11 @@ export function textSprite(
   const texture = new THREE.CanvasTexture(c);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }),
+    asOverlay(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })),
   );
   sprite.scale.set(size * 2, size, 1);
   sprite.renderOrder = 20;
-  return sprite;
+  return onOverlay(sprite);
 }
 
 /**
@@ -42,18 +44,20 @@ export function floorRing(
 ): THREE.Mesh {
   const mesh = new THREE.Mesh(
     new THREE.RingGeometry(inner, outer, 40),
-    new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      depthWrite: false,
-      depthTest: !throughWalls,
-      side: THREE.DoubleSide,
-    }),
+    asOverlay(
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        depthWrite: false,
+        depthTest: !throughWalls,
+        side: THREE.DoubleSide,
+      }),
+    ),
   );
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = 0.04;
   mesh.renderOrder = throughWalls ? 19 : 5;
-  return mesh;
+  return onOverlay(mesh);
 }
 
 /** Radial progress dial (hold-to-interact, fixture recharge), redrawn only when it changes. */
@@ -75,10 +79,13 @@ export class Dial {
     this.texture = new THREE.CanvasTexture(c);
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: this.texture, depthTest: false, transparent: true }),
+      asOverlay(
+        new THREE.SpriteMaterial({ map: this.texture, depthTest: false, transparent: true }),
+      ),
     );
     this.sprite.scale.set(size, size, 1);
     this.sprite.renderOrder = 21;
+    onOverlay(this.sprite);
   }
 
   set(fraction: number) {
@@ -131,7 +138,8 @@ export class Sparks {
     this.points = new THREE.Points(
       g,
       new THREE.PointsMaterial({
-        color: PALETTE.spark,
+        // Hotter than white, so they bloom.
+        color: new THREE.Color(PALETTE.spark).multiplyScalar(3.5),
         size: 4,
         sizeAttenuation: false,
         transparent: true,
@@ -140,6 +148,7 @@ export class Sparks {
       }),
     );
     this.points.frustumCulled = false;
+    onOverlay(this.points);
     this.pos.fill(-999);
   }
 
@@ -200,16 +209,19 @@ export class DustPuffs {
   constructor(count = 36) {
     for (let i = 0; i < count; i++) {
       const s = new THREE.Sprite(
-        new THREE.SpriteMaterial({
-          map: puff(),
-          color: 0xd8cfc0,
-          transparent: true,
-          depthWrite: false,
-          opacity: 0,
-        }),
+        asOverlay(
+          new THREE.SpriteMaterial({
+            map: puff(),
+            color: 0xd8cfc0,
+            transparent: true,
+            depthWrite: false,
+            opacity: 0,
+          }),
+        ),
       );
       s.visible = false;
       s.renderOrder = 4;
+      onOverlay(s);
       this.sprites.push(s);
       this.life.push(0);
       this.vel.push(new THREE.Vector3());
@@ -304,10 +316,13 @@ export class SpeechBubble {
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: this.texture, depthTest: false, transparent: true }),
+      asOverlay(
+        new THREE.SpriteMaterial({ map: this.texture, depthTest: false, transparent: true }),
+      ),
     );
     this.sprite.scale.set(2.4, 0.6, 1);
     this.sprite.renderOrder = 21;
+    onOverlay(this.sprite);
     this.sprite.visible = false;
   }
 

@@ -69,7 +69,7 @@ import {
   type ViewCone,
 } from '../systems/vision';
 import { addWarning, recoverHeart } from '../systems/warnings';
-import { angleTo, deg, dist, round2 } from '../util/math';
+import { angleDiff, angleTo, deg, dist, round2 } from '../util/math';
 import { createRng, type Rng } from '../util/rng';
 import { LevelGrid } from './levelGrid';
 import { cleaningJobs, guardSpots, hideSpots, patrolPoints, teacherPosts } from './npcPlaces';
@@ -142,6 +142,8 @@ export class ShiftSession {
   /** In-progress sidestep around an object (see steerMove). */
   private detour: Detour | null = null;
   private focus: InteractionTarget | null = null;
+  /** The look direction given with this tick's input, if the view has one (first person). */
+  private aim: number | null = null;
   private suspicion = { carrying: false, scrapping: false };
   private escalation = 0;
   private summary: ShiftSummary | null = null;
@@ -347,6 +349,9 @@ export class ShiftSession {
     // Clamp huge frames (tab switches) so nothing tunnels or skips a state.
     dt = Math.min(dt, 0.1);
     this.elapsed += dt;
+    // Looking somewhere of your own accord: that's the way you face, before anything is thrown.
+    this.aim = input.aim ?? null;
+    if (this.aim !== null) this.player.facing = this.aim;
 
     this.updateAbility(dt, input);
     if (input.use) this.useGadget(input.use);
@@ -474,7 +479,10 @@ export class ShiftSession {
     const mdx = p.pos.x - before.x;
     const mdy = p.pos.y - before.y;
     p.vel = { x: mdx / dt, y: mdy / dt };
-    p.facing = Math.hypot(mdx, mdy) > speed * dt * 0.2 ? Math.atan2(mdy, mdx) : Math.atan2(my, mx);
+    if (this.aim === null) {
+      p.facing =
+        Math.hypot(mdx, mdy) > speed * dt * 0.2 ? Math.atan2(mdy, mdx) : Math.atan2(my, mx);
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -562,9 +570,12 @@ export class ShiftSession {
       });
     }
 
-    candidates.sort(
-      (a, b) => Number(b.enabled) - Number(a.enabled) || dist(pos, a.pos) - dist(pos, b.pos),
-    );
+    // Nearest first; with a look direction, what you're looking at counts as nearer.
+    const aim = this.aim;
+    const cost = (t: InteractionTarget) =>
+      dist(pos, t.pos) +
+      (aim === null ? 0 : Math.abs(angleDiff(aim, angleTo(pos, t.pos))) * P.aimWeight);
+    candidates.sort((a, b) => Number(b.enabled) - Number(a.enabled) || cost(a) - cost(b));
     return candidates[0] ?? null;
   }
 
@@ -584,8 +595,8 @@ export class ShiftSession {
     }
     this.interaction.target = target;
     this.interaction.elapsed += dt;
-    // Turn to face whatever you're working on.
-    if (dist(this.player.pos, target.pos) > 1)
+    // Turn to face whatever you're working on (unless you're choosing where to look).
+    if (this.aim === null && dist(this.player.pos, target.pos) > 1)
       this.player.facing = angleTo(this.player.pos, target.pos);
     if (this.interaction.elapsed >= target.duration) {
       this.interaction = null;

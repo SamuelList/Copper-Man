@@ -1,14 +1,17 @@
 import { TILE_SIZE } from '@core/content/balance';
 import { CHARACTERS } from '@core/content/characters';
+import type { Vec2 } from '@core/model/types';
 import { ShiftSession } from '@core/session/ShiftSession';
 import type { ShiftConfig, ShiftSummary } from '@core/session/types';
 import { bagTotal } from '@core/systems/bag';
 import { bossLine, custodianLine } from '@state/messages';
+import { useSettings, type ViewMode } from '@state/settingsStore';
 import { useShiftStore } from '@state/shiftStore';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { connectSession, type SessionBridge } from './bridge';
 import { InputController } from './input/InputController';
+import { LookController } from './input/LookController';
 import {
   ActorView,
   LastSeenGhost,
@@ -18,8 +21,12 @@ import {
   type IconKind,
 } from './render/actors';
 import { toWorld } from './render/coords';
+import { FirstPersonCamera } from './render/firstPersonCamera';
+import { FloorMirror } from './render/floorMirror';
 import { FogOfWar } from './render/fogOfWar';
+import { Hands } from './render/hands';
 import { IsoCamera } from './render/isoCamera';
+import { LOOKS, type ViewLook } from './render/looks';
 import {
   Dial,
   DustPuffs,
@@ -39,8 +46,11 @@ import {
   disposeModelCache,
   disposeTextureCache,
 } from './render/models';
+import { TileVisibility } from './render/occlusion';
 import { PALETTE, STUDENT_SHIRTS } from './render/palette';
-import { QualityGovernor } from './render/quality';
+import { PostFX } from './render/post/PostFX';
+import { isSoftwareRenderer, QualityGovernor } from './render/quality';
+import { ThreatRing, type Threat } from './render/threats';
 import { WetFloors } from './render/wetFloors';
 import { VisionCone } from './render/visionCones';
 import { buildWorld, type World } from './render/world';
@@ -56,6 +66,12 @@ const STEP = 1 / 60;
 const MAX_STEPS_PER_FRAME = 8;
 /** Pause before handing the summary to React so the end-of-shift banner can be read. */
 const END_DELAY_MS = 1800;
+/** How fast the arrow keys turn your head in first person, radians per second. */
+const TURN_RATE = 2.6;
+/** In first person the sun's shadows are centred this far ahead of you, tiles. */
+const SHADOW_LEAD = 8;
+/** How far first person looks for things to draw, pixels. */
+const VIEW_RANGE = TILE_SIZE * 90;
 
 interface NpcViews {
   actor: ActorView;
@@ -72,13 +88,37 @@ const debugHooksEnabled = () =>
 
 /**
  * Owns the renderer, scene and loop for one shift. A thin adapter: it feeds input and time into
- * the ShiftSession and draws whatever the session says. No game rules live here.
+ * the ShiftSession and draws whatever the session says, through either camera: the fixed
+ * top-down diorama or the worker's own eyes. No game rules live here.
  */
 export class GameEngine {
   readonly session: ShiftSession;
   private readonly renderer: THREE.WebGLRenderer;
+  /** Post-processing chain; null where the device can't render to floating-point targets. */
+  private readonly post: PostFX | null;
+  /** The grade in use: each view has its own. */
+  private look: ViewLook = { ...LOOKS.iso };
+  /** Draws what the floor reflects. */
+  private readonly mirror = new FloorMirror();
   private readonly scene = new THREE.Scene();
   private readonly iso = new IsoCamera();
+  private readonly eyes = new FirstPersonCamera();
+  /** First person: your own hands, and who's noticing you from where. */
+  private readonly hands: Hands;
+  private readonly threats = new ThreatRing();
+  /** How fast the view is turning this frame, radians per second. */
+  private turning = { x: 0, y: 0 };
+  private readonly mouse: LookController;
+  /** Tiles the eyes could see, for skipping scenery behind walls in first person. */
+  private readonly seen: TileVisibility;
+  private mode: ViewMode = 'iso';
+  private readonly unwatchSettings: () => void;
+  /** The mouse was ours when the game paused: take it back on resume. */
+  private recapture = false;
+  /** Where the worker was one simulation step ago (the eyes glide between steps). */
+  private stepFrom: Vec2;
+  /** 0..1: eased "you are being chased", for the red pulse at the edge of the screen. */
+  private danger = 0;
   private readonly kit: MaterialKit;
   private readonly world: World;
   private readonly fog: FogOfWar;
@@ -105,7 +145,7 @@ export class GameEngine {
   private readonly resizeObserver: ResizeObserver;
   private frame = 0;
   private last = performance.now();
-  private readonly quality = new QualityGovernor(window.devicePixelRatio);
+  private readonly quality: QualityGovernor;
   private accumulator = 0;
   private pendingAbility = false;
   private pendingUse: string | null = null;
@@ -118,11 +158,16 @@ export class GameEngine {
   ) {
     this.session = new ShiftSession(params.config);
     const { level } = this.session;
+    this.stepFrom = { ...this.session.player.pos };
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance',
     });
+    this.quality = new QualityGovernor(
+      window.devicePixelRatio,
+      isSoftwareRenderer(this.renderer.getContext()),
+    );
     this.renderer.setPixelRatio(this.quality.current.ratio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -131,20 +176,26 @@ export class GameEngine {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.style.display = 'block';
     host.appendChild(this.renderer.domElement);
+    this.post = PostFX.supported(this.renderer) ? new PostFX(this.renderer) : null;
     this.scene.background = new THREE.Color(PALETTE.background);
     // Soft studio reflections so metal, chrome and glass read as shiny.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
     this.scene.environment = this.envMap;
-    this.scene.environmentIntensity = 0.5;
 
     const shading = createWorldShading(level.cols, level.rows);
     this.kit = new MaterialKit(shading);
-    this.world = buildWorld(this.scene, this.session, this.kit);
+    this.world = buildWorld(this.scene, this.session, this.kit, this.renderer);
     this.fog = new FogOfWar(level.cols, level.rows, this.session.explored);
-    shading.uLightMap.value = this.world.lightMap;
     shading.uFogMap.value = this.fog.texture;
+    this.mirror.hide(...this.world.underfoot);
+    this.seen = new TileVisibility(this.session.grid);
+    // An unlocked door lets the light through, and you can see past it.
+    this.session.events.on('door:unlocked', () => {
+      this.world.lights.bake();
+      this.seen.invalidate();
+    });
 
     const character = CHARACTERS.get(this.session.character.id);
     this.player = new ActorView(buildWorker(this.kit, character.color), this.scene);
@@ -195,15 +246,35 @@ export class GameEngine {
       this.endTimer = window.setTimeout(() => params.onEnd(summary), END_DELAY_MS);
     });
 
+    // What's held in front of the eyes rides on their camera.
+    this.hands = new Hands(this.kit, character.color);
+    this.eyes.camera.add(this.hands.root, this.threats.group);
+    this.scene.add(this.eyes.camera);
+    this.mouse = new LookController(this.renderer.domElement, () => {
+      // Esc freed the mouse; the browser kept the key press to itself, so pause here.
+      this.recapture = true;
+      if (this.session.status === 'running') useShiftStore.getState().setPaused(true);
+    });
+    this.setView(useSettings.getState().view);
+    this.unwatchSettings = useSettings.subscribe((settings) => {
+      if (settings.view !== this.mode) this.setView(settings.view);
+    });
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
-    this.resize();
+    this.applyQuality();
     window.addEventListener('blur', this.onBlur);
 
     if (debugHooksEnabled()) {
       (window as unknown as { __copper?: unknown }).__copper = {
         session: this.session,
         engine: this,
+        view: () => ({ mode: this.mode, yaw: this.eyes.yaw, pitch: this.eyes.pitch }),
+        /** Hold the renderer at one quality level (0 is best) instead of adapting. */
+        quality: (level: number) => {
+          this.quality.pin(level);
+          this.applyQuality();
+        },
       };
     }
 
@@ -300,12 +371,60 @@ export class GameEngine {
     });
   }
 
+  /** Switch between the top-down diorama and the worker's own eyes. */
+  private setView(mode: ViewMode) {
+    this.mode = mode;
+    const firstPerson = mode === 'fps';
+    this.look = { ...LOOKS[mode] };
+    this.world.setFirstPerson(firstPerson);
+    this.seen.invalidate();
+    if (!firstPerson) this.world.cull(null);
+    this.mouse.setEnabled(firstPerson);
+    if (firstPerson) this.eyes.face(this.session.player.facing);
+    this.hands.root.visible = firstPerson;
+    this.threats.group.visible = firstPerson;
+    // You don't see your own body from behind your own eyes, but it still casts its shadow.
+    this.showBody(!firstPerson);
+    this.resize();
+  }
+
+  /** Draw the worker's body, or leave only its shadow. */
+  private showBody(visible: boolean) {
+    this.player.root.traverse((o) => {
+      const material = (o as THREE.Mesh).material as THREE.Material | undefined;
+      if (!material) return;
+      material.colorWrite = visible;
+      material.depthWrite = visible;
+    });
+  }
+
+  /** In first person, could someone standing there be seen? (Any tile they overlap is in view.) */
+  private inSight(pos: Vec2): boolean {
+    const x = toWorld(pos.x);
+    const z = toWorld(pos.y);
+    return this.seen.anyIn(x - 0.3, z - 0.3, x + 0.3, z + 0.3);
+  }
+
+  /** The pause menu and the end of the shift need the mouse back; take it again afterwards. */
+  private shareMouse(needed: boolean) {
+    if (needed) {
+      if (this.mouse.locked) {
+        this.recapture = true;
+        this.mouse.release();
+      }
+    } else if (this.recapture) {
+      this.recapture = false;
+      this.mouse.capture();
+    }
+  }
+
   /** Dynamic quality: render less when the device can't keep up (see QualityGovernor). */
   private applyQuality() {
     const q = this.quality.current;
     this.renderer.setPixelRatio(q.ratio);
     this.scene.environment = q.reflections ? this.envMap : null;
     this.world.setShadows(q.shadows);
+    if (q.effects !== 0) this.post?.setLevel(q.effects);
     this.resize();
   }
 
@@ -318,6 +437,10 @@ export class GameEngine {
     const h = this.host.clientHeight || 1;
     this.renderer.setSize(w, h);
     this.iso.resize(w, h);
+    this.eyes.resize(w, h);
+    const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    this.post?.setSize(buffer.x, buffer.y);
+    this.mirror.setSize(buffer.x, buffer.y);
   }
 
   private loop = (now: number) => {
@@ -329,15 +452,31 @@ export class GameEngine {
     if (this.quality.sample(raw) !== null) this.applyQuality();
 
     const store = useShiftStore.getState();
-    if (this.input.pausePressed() && this.session.status === 'running') store.togglePause();
-    if (!useShiftStore.getState().paused) {
-      const input = this.input.read(this.iso);
+    const running = this.session.status === 'running';
+    if (this.input.pausePressed() && running) store.togglePause();
+    if (this.input.viewPressed() && running) useSettings.getState().toggleView();
+    const paused = useShiftStore.getState().paused;
+    const firstPerson = this.mode === 'fps';
+    this.shareMouse(paused || !running);
+    // Always drained, so a drag made while paused doesn't spin you round on resume.
+    const turned = this.mouse.take();
+    this.turning = { x: 0, y: 0 };
+    if (!paused) {
+      if (firstPerson && running) {
+        const dx = turned.x + this.input.turn() * TURN_RATE * dt;
+        this.eyes.turn(dx, turned.y);
+        if (dt > 0) this.turning = { x: dx / dt, y: turned.y / dt };
+      }
+      const input = this.input.read(firstPerson ? this.eyes.basis : this.iso, firstPerson);
+      // Where you look is where you face, throw and reach.
+      if (firstPerson) input.aim = this.eyes.yaw;
       // One-shot actions wait for the next simulation step (a fast display can draw a frame
       // without stepping), then fire exactly once.
       this.pendingAbility ||= input.ability;
       this.pendingUse = input.use ?? this.pendingUse;
       this.accumulator = Math.min(this.accumulator + dt, STEP * MAX_STEPS_PER_FRAME);
       while (this.accumulator >= STEP) {
+        this.stepFrom = { ...this.session.player.pos };
         this.session.tick(STEP, { ...input, ability: this.pendingAbility, use: this.pendingUse });
         this.pendingAbility = false;
         this.pendingUse = null;
@@ -354,6 +493,7 @@ export class GameEngine {
     const p = s.player;
     const px = toWorld(p.pos.x);
     const pz = toWorld(p.pos.y);
+    const firstPerson = this.mode === 'fps';
 
     // Player.
     this.kickUpDust(
@@ -467,7 +607,14 @@ export class GameEngine {
     this.progress.sprite.visible = !!active;
     if (active) {
       this.progress.set(active.elapsed / active.target.duration);
-      this.progress.sprite.position.set(px, 1.55, pz);
+      // Over the worker's head; from behind their eyes, over what they're working on.
+      if (firstPerson) {
+        this.progress.sprite.position.set(
+          toWorld(active.target.pos.x),
+          1.05,
+          toWorld(active.target.pos.y),
+        );
+      } else this.progress.sprite.position.set(px, 1.55, pz);
       if (active.target.kind === 'fixture' && Math.random() < dt * 30) {
         this.sparks.emit(toWorld(active.target.pos.x), 0.5, toWorld(active.target.pos.y), 2);
       }
@@ -510,12 +657,77 @@ export class GameEngine {
     );
 
     // Camera, cutaway, shadows, fog.
-    this.iso.follow(px, pz, dt);
-    this.world.update(px, pz, time);
-    this.world.walls.update(px, pz, this.iso.toCamera, this.iso.screenRight, dt);
-    this.fog.update(s);
+    this.iso.follow(px, pz, dt, firstPerson);
+    if (firstPerson) {
+      // Glide between simulation steps (unless the worker was just escorted somewhere else).
+      const alpha = Math.min(1, this.accumulator / STEP);
+      const jumped = Math.hypot(p.pos.x - this.stepFrom.x, p.pos.y - this.stepFrom.y) > TILE_SIZE;
+      const from = jumped ? p.pos : this.stepFrom;
+      const forward = this.eyes.basis.screenUp;
+      const right = this.eyes.basis.screenRight;
+      const walkSpeed = Math.max(1, Math.hypot(p.vel.x, p.vel.y));
+      this.eyes.update(
+        toWorld(from.x + (p.pos.x - from.x) * alpha),
+        toWorld(from.y + (p.pos.y - from.y) * alpha),
+        dt,
+        {
+          sprinting: p.sprinting,
+          strafe: p.moving ? (p.vel.x * right.x + p.vel.y * right.y) / walkSpeed : 0,
+        },
+      );
+      this.hands.update({
+        ...this.eyes.gait,
+        working: !!active,
+        turnX: this.turning.x,
+        turnY: this.turning.y,
+        time,
+        dt,
+      });
+      const noticing: Threat[] = [
+        { pos: boss.pos, level: boss.detection, alarmed: boss.mode === 'chase' },
+        ...s.students.map((st) => ({
+          pos: st.pos,
+          level: st.detection,
+          alarmed: st.mode === 'alarmed',
+        })),
+        ...s.teachers.map((t) => ({
+          pos: t.pos,
+          level: t.detection,
+          alarmed: t.mode === 'confront',
+        })),
+      ];
+      if (c) noticing.push({ pos: c.pos, level: c.detection, alarmed: c.mode === 'radio' });
+      this.threats.update(p.pos, this.eyes.yaw, s.status === 'running' ? noticing : [], time);
+      // Shadows where you're looking, not behind you.
+      this.world.update(px + forward.x * SHADOW_LEAD, pz + forward.y * SHADOW_LEAD, time);
+      if (this.seen.update(p.pos, VIEW_RANGE)) this.world.cull(this.seen);
+    } else {
+      this.world.update(px, pz, time);
+      this.fog.update(s);
+    }
+    this.world.walls.update(px, pz, this.iso.toCamera, this.iso.screenRight, dt, !firstPerson);
 
-    this.renderer.render(this.scene, this.iso.camera);
+    const chased = s.status === 'running' && boss.mode === 'chase' ? 1 : 0;
+    this.danger += (chased - this.danger) * Math.min(1, dt * 4);
+    const camera = firstPerson ? this.eyes.camera : this.iso.camera;
+    const { effects, mirror } = this.quality.current;
+    if (this.post && mirror) {
+      // The floor's reflection, drawn first. It's the one place you see yourself in first person.
+      if (firstPerson) this.showBody(true);
+      this.mirror.render(this.renderer, this.scene, camera);
+      if (firstPerson) this.showBody(false);
+      this.world.reflect(this.mirror.texture, this.mirror.matrix, this.look.mirror);
+      // That pass drew this frame's shadows already.
+      this.renderer.shadowMap.autoUpdate = false;
+    } else this.world.reflect(null, this.mirror.matrix, 0);
+    if (this.post && effects > 0) {
+      const pulse = this.danger * (0.2 + 0.1 * Math.sin(time * 7));
+      this.post.render(this.scene, camera, this.look, time, pulse);
+    } else {
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, camera);
+    }
+    this.renderer.shadowMap.autoUpdate = true;
   }
 
   /** Running feet kick up dust (only where you can see it). */
@@ -538,7 +750,9 @@ export class GameEngine {
     time: number,
   ) {
     const s = this.session;
-    const visible = s.isVisibleToPlayer(pose.pos);
+    // Top-down, the fog of war hides whoever is out of sight. In first person walls do that
+    // already; the check only saves drawing people who are behind one.
+    const visible = this.mode === 'fps' ? this.inSight(pose.pos) : s.isVisibleToPlayer(pose.pos);
     const footfalls = v.actor.sync(pose, dt);
     if (visible) this.kickUpDust(footfalls);
     v.actor.root.visible = visible;
@@ -572,6 +786,8 @@ export class GameEngine {
     window.clearTimeout(this.endTimer);
     this.resizeObserver.disconnect();
     window.removeEventListener('blur', this.onBlur);
+    this.unwatchSettings();
+    this.mouse.dispose();
     this.input.dispose();
     this.bridge.dispose();
     this.session.events.clear();
@@ -593,8 +809,10 @@ export class GameEngine {
     this.envMap.dispose();
     this.kit.dispose();
     this.fog.dispose();
-    this.world.floorTexture.dispose();
-    this.world.lightMap.dispose();
+    this.post?.dispose();
+    this.mirror.dispose();
+    this.threats.dispose();
+    this.world.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     const w = window as unknown as { __copper?: { engine?: unknown } };

@@ -4,9 +4,11 @@ import type { ShiftSnapshot } from '@core/session/types';
 import { useAppStore } from '@state/appStore';
 import { initialCareer, useCareerStore } from '@state/careerStore';
 import { useInputMode } from '@state/inputMode';
+import { useSettings } from '@state/settingsStore';
 import { useShiftStore } from '@state/shiftStore';
 import { virtualInput } from '@state/virtualInput';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { ViewSwitch } from './components/ViewSwitch';
 import { Hud } from './hud/Hud';
 import { CharacterSelectScreen } from './screens/CharacterSelectScreen';
 import { ShiftSummaryScreen } from './screens/ShiftSummaryScreen';
@@ -16,7 +18,8 @@ beforeEach(() => {
   useCareerStore.setState(initialCareer());
   useAppStore.setState({ screen: 'title', shiftNonce: 0 });
   useShiftStore.getState().reset();
-  useInputMode.setState({ mode: 'keyboard' });
+  useInputMode.setState({ mode: 'keyboard', mouseLook: false });
+  useSettings.setState({ view: 'iso' });
   virtualInput.reset();
 });
 afterEach(cleanup);
@@ -199,6 +202,45 @@ describe('Hud', () => {
     expect(virtualInput.interact).toBe(false);
   });
 
+  it('switches to first person and back from the HUD', () => {
+    render(<Hud />);
+    act(() => useShiftStore.getState().setSnapshot(snapshot));
+    expect(screen.queryByTestId('crosshair')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to first person view' }));
+    expect(useSettings.getState().view).toBe('fps');
+    // A dot to aim with (lit: the wall heater is in reach) and how to look around.
+    expect(screen.getByTestId('crosshair')).toHaveAttribute('data-state', 'ready');
+    expect(screen.getByTestId('look-hint')).toHaveTextContent('Click to look around');
+    expect(screen.getByText('look')).toBeInTheDocument();
+    // Once the mouse is captured the hint gets out of the way.
+    act(() => useInputMode.getState().setMouseLook(true));
+    expect(screen.queryByTestId('look-hint')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to top-down view' }));
+    expect(useSettings.getState().view).toBe('iso');
+    expect(screen.queryByTestId('crosshair')).not.toBeInTheDocument();
+  });
+
+  it('in first person on a touch screen, dragging the right side looks around', () => {
+    useInputMode.setState({ mode: 'touch' });
+    render(<Hud />);
+    act(() => useShiftStore.getState().setSnapshot(snapshot));
+    expect(screen.queryByTestId('look-zone')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to first person view' }));
+    const zone = screen.getByTestId('look-zone');
+    fireEvent.pointerDown(zone, { pointerId: 7, clientX: 600, clientY: 200 });
+    fireEvent.pointerMove(zone, { pointerId: 7, clientX: 630, clientY: 190 });
+    fireEvent.pointerMove(zone, { pointerId: 7, clientX: 640, clientY: 195 });
+    // Another finger (on the stick, say) doesn't turn your head.
+    fireEvent.pointerMove(zone, { pointerId: 8, clientX: 100, clientY: 100 });
+    expect(virtualInput.takeLook()).toEqual({ x: 40, y: -5 });
+    fireEvent.pointerUp(zone, { pointerId: 7 });
+    fireEvent.pointerMove(zone, { pointerId: 7, clientX: 700, clientY: 195 });
+    expect(virtualInput.takeLook()).toEqual({ x: 0, y: 0 });
+  });
+
   it('shows toasts and the end-of-shift banner', () => {
     render(<Hud />);
     act(() => {
@@ -230,5 +272,18 @@ describe('Hud', () => {
       }),
     );
     expect(screen.getByTestId('end-banner')).toHaveTextContent("YOU'RE FIRED!");
+  });
+});
+
+describe('ViewSwitch', () => {
+  it('picks the camera and shows which one is in use', () => {
+    render(<ViewSwitch />);
+    const topDown = screen.getByRole('radio', { name: 'Top-down' });
+    const firstPerson = screen.getByRole('radio', { name: 'First person' });
+    expect(topDown).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(firstPerson);
+    expect(useSettings.getState().view).toBe('fps');
+    expect(firstPerson).toHaveAttribute('aria-checked', 'true');
+    expect(topDown).toHaveAttribute('aria-checked', 'false');
   });
 });

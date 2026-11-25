@@ -4,6 +4,8 @@ import { headingToRotation, toWorld } from './coords';
 import { Gait } from './gait';
 import type { CharacterModel } from './models';
 import { textSprite } from './markers';
+import { onOverlay } from './layers';
+import { asOverlay } from './materials';
 
 export interface ActorPose {
   pos: Vec2;
@@ -151,17 +153,20 @@ export class LastSeenGhost {
   constructor(scene: THREE.Scene, color: number, height: number) {
     this.mesh = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.2, height - 0.4, 3, 10),
-      new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        depthTest: false,
-      }),
+      asOverlay(
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          depthTest: false,
+        }),
+      ),
     );
     this.mesh.position.y = height / 2;
     this.mesh.visible = false;
     this.mesh.renderOrder = 18;
+    onOverlay(this.mesh);
     scene.add(this.mesh);
   }
 

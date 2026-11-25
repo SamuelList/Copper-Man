@@ -5,6 +5,8 @@ import type { Vec2 } from '@core/model/types';
 import { visionPolygon, type ViewCone } from '@core/systems/vision';
 import * as THREE from 'three';
 import { toWorld } from './coords';
+import { onOverlay } from './layers';
+import { asOverlay } from './materials';
 import { PALETTE } from './palette';
 
 const MAX_POINTS = 400;
@@ -23,15 +25,18 @@ class FanMesh {
     this.colors = new Float32Array(MAX_POINTS * 3 * 4);
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
     this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 4));
-    const material = new THREE.MeshBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
+    const material = asOverlay(
+      new THREE.MeshBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
     this.mesh = new THREE.Mesh(this.geometry, material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = renderOrder;
+    onOverlay(this.mesh);
   }
 
   set(points: Vec2[], color: THREE.Color, centerAlpha: number, edgeAlpha: number) {

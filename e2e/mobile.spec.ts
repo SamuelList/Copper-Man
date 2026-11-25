@@ -10,8 +10,17 @@ interface DebugWindow {
       vanBoxes: { minX: number; maxX: number; minY: number; maxY: number }[];
       inventory: Record<string, number>;
     };
+    /** Which camera is in use, and where first person is looking. */
+    view(): { mode: 'iso' | 'fps'; yaw: number; pitch: number };
+    /** Hold the renderer at one quality level (0 is best; out of range means lowest). */
+    quality(level: number): void;
   };
 }
+
+const view = (page: Page) => page.evaluate(() => (window as DebugWindow).__copper!.view());
+
+/** How far `to` is to the right of `from`, in radians (headings wrap around). */
+const turned = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 
 const TILE = 32;
 
@@ -47,6 +56,10 @@ const touch = (
 test('plays a shift with touch controls on a phone', async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  // A shader that fails to compile is logged, not thrown.
+  page.on('console', (m) => {
+    if (m.type() === 'error' && /THREE|shader|WebGL/i.test(m.text())) errors.push(m.text());
+  });
   const cdp = await page.context().newCDPSession(page);
 
   await page.goto('/?debug');
@@ -97,6 +110,59 @@ test('plays a shift with touch controls on a phone', async ({ page }, testInfo) 
   await page.waitForTimeout(300);
   expect((await player(page)).sprinting).toBe(false);
   await touch(cdp, 'touchEnd', []);
+
+  // First person: the eye button switches camera, and dragging the right side turns your head.
+  // (In a classroom with room to walk: indoors is also much less for a software renderer to
+  // draw than the car park.)
+  await page.evaluate((tile) => {
+    (window as DebugWindow).__copper!.session.player.pos = { x: 11.5 * tile, y: 2.5 * tile };
+  }, TILE);
+  await page.getByRole('button', { name: 'Switch to first person view' }).tap();
+  await expect.poll(async () => (await view(page)).mode).toBe('fps');
+  const lookZone = (await page.getByTestId('look-zone').boundingBox())!;
+  const eye = {
+    x: lookZone.x + lookZone.width * 0.5,
+    y: lookZone.y + lookZone.height * 0.3,
+    id: 3,
+  };
+  const before = await view(page);
+  await touch(cdp, 'touchStart', [eye]);
+  for (let i = 1; i <= 6; i++) await touch(cdp, 'touchMove', [{ ...eye, x: eye.x + i * 12 }]);
+  await touch(cdp, 'touchEnd', []);
+  await expect
+    .poll(async () => turned(before.yaw, (await view(page)).yaw), { timeout: 20_000 })
+    .toBeGreaterThan(0.2);
+  // Pushing the stick up walks the way you're looking.
+  const facing = await view(page);
+  const from3d = await player(page);
+  await touch(cdp, 'touchStart', [from]);
+  await touch(cdp, 'touchMove', [{ ...from, y: from.y - 40 }]);
+  await expect
+    .poll(
+      async () => {
+        const now = await player(page);
+        return (
+          (now.x - from3d.x) * Math.cos(facing.yaw) + (now.y - from3d.y) * Math.sin(facing.yaw)
+        );
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(6);
+  await touch(cdp, 'touchEnd', []);
+  // A couple of frames with every effect on (CI's software renderer starts without them), so
+  // a shader that fails to compile shows up as an error.
+  await page.evaluate(async () => {
+    const copper = (window as DebugWindow).__copper!;
+    copper.quality(0);
+    for (let i = 0; i < 2; i++) await new Promise((done) => requestAnimationFrame(done));
+    copper.quality(99);
+  });
+  await testInfo.attach('first-person', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+  await page.getByRole('button', { name: 'Switch to top-down view' }).tap();
+  await expect.poll(async () => (await view(page)).mode).toBe('iso');
 
   // Gadgets show up in the tray and fire on tap.
   await page.evaluate(() => {

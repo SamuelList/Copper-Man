@@ -3,6 +3,7 @@ import { NPCS } from '@core/content/npcs';
 import { useAppStore } from '@state/appStore';
 import { useCareerStore } from '@state/careerStore';
 import { Button, Panel } from '../components';
+import { ViewSwitch } from '../components/ViewSwitch';
 import { money } from '../format';
 import styles from './screens.module.css';
 
@@ -32,6 +33,7 @@ export function TitleScreen() {
           New Career
         </Button>
       </div>
+      <ViewSwitch />
       <Panel className={styles.how}>
         <h2>How to play</h2>
         <ul>
@@ -74,6 +76,11 @@ export function TitleScreen() {
           <li>
             <strong>Level up.</strong> Everything you do earns XP. Each level is a skill point for
             the Shadow, Hustle or Wheeler-Dealer trees.
+          </li>
+          <li>
+            <strong>Pick your view.</strong> Watch the school from above, or go first person and
+            sneak the halls through your own eyes. Switch any time with <strong>V</strong> (or the
+            eye button).
           </li>
         </ul>
       </Panel>

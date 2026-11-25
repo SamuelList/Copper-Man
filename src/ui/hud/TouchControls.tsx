@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useFirstPerson } from './hooks';
 import styles from './touch.module.css';
 
 /** Stick travel in CSS px. */
@@ -128,6 +129,45 @@ function Joystick() {
   );
 }
 
+/**
+ * First person: drag anywhere on the right side to look around. The buttons sit on top of it,
+ * so a thumb resting on one never turns your head.
+ */
+function LookZone() {
+  const active = useRef<{ id: number; x: number; y: number } | null>(null);
+
+  const onDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (active.current) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    active.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  };
+
+  const onMove = (e: ReactPointerEvent) => {
+    const a = active.current;
+    if (!a || a.id !== e.pointerId) return;
+    virtualInput.look(e.clientX - a.x, e.clientY - a.y);
+    a.x = e.clientX;
+    a.y = e.clientY;
+  };
+
+  const onUp = (e: ReactPointerEvent) => {
+    if (active.current?.id === e.pointerId) active.current = null;
+  };
+
+  return (
+    <div
+      className={styles.lookZone}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
+      onLostPointerCapture={onUp}
+      data-testid="look-zone"
+    />
+  );
+}
+
 /** Hold-to-interact button that shows what you're about to do and how far along it is. */
 function InteractButton() {
   const prompt = useShiftStore(
@@ -244,11 +284,16 @@ export function GadgetTray({ showKeys }: { showKeys: boolean }) {
   );
 }
 
-/** Phone controls: floating joystick on the left, thumb buttons on the right. */
+/**
+ * Phone controls: floating joystick on the left, thumb buttons on the right, and in first
+ * person the rest of the right side to drag your view around.
+ */
 export function TouchControls() {
+  const firstPerson = useFirstPerson();
   return (
     <div className={styles.touch} data-testid="touch-controls">
       <Joystick />
+      {firstPerson && <LookZone />}
       <div className={styles.actions}>
         <GadgetTray showKeys={false} />
         <div className={styles.cluster}>

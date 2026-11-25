@@ -346,6 +346,60 @@ describe('ShiftSession progression + gadgets', () => {
   });
 });
 
+describe('ShiftSession: a look direction of your own (first person)', () => {
+  it('faces where you look, whichever way you walk', () => {
+    const s = session();
+    const startX = s.player.pos.x;
+    const south = Math.PI / 2;
+    hold(s, 0.3, input({ moveX: 1, aim: south }));
+    expect(s.player.pos.x).toBeGreaterThan(startX);
+    expect(s.player.facing).toBe(south);
+    // Standing still, you can still look around.
+    hold(s, 0.1, input({ aim: -1 }));
+    expect(s.player.facing).toBe(-1);
+  });
+
+  it("isn't turned by what you're working on", () => {
+    const s = session();
+    standAtFountain(s);
+    const south = Math.PI / 2;
+    hold(s, 0.5, input({ interact: true, aim: south }));
+    expect(s.interaction?.target.kind).toBe('fixture');
+    expect(s.player.facing).toBe(south);
+  });
+
+  it('throws a whoopee cushion the way you look', () => {
+    const s = session({ inventory: { 'whoopee-cushion': 1 } });
+    const noise = record(s, 'noise:made');
+    placePlayer(s, 6, 3);
+    s.player.facing = 0; // feet pointing east
+    s.tick(1 / 60, input({ use: 'whoopee-cushion', aim: Math.PI })); // looking west
+    expect(noise[0]!.pos.x).toBeLessThan(s.player.pos.x - TILE_SIZE * 2);
+  });
+
+  it('reaches for what you look at when two things are in reach', () => {
+    // A fountain and a wall heater either side of you on the north wall.
+    const level = testLevel(['#########', '#V.F.H.1#', '#VP....2#', '#Z......#', '#########']);
+    const s = session({ level });
+    const fountain = s.fixtures.find((f) => f.def.id === 'drinking-fountain')!;
+    const heater = s.fixtures.find((f) => f.def.id === 'wall-heater')!;
+    s.player.pos = { x: 4.4 * TILE_SIZE, y: 1.7 * TILE_SIZE };
+    const toward = (f: typeof fountain) =>
+      Math.atan2(f.pos.y - s.player.pos.y, f.pos.x - s.player.pos.x);
+
+    // With no look direction the nearer one wins.
+    s.tick(1 / 60, input());
+    expect(s.currentTarget?.id).toBe(fountain.id);
+    s.tick(1 / 60, input({ aim: toward(heater) }));
+    expect(s.currentTarget?.id).toBe(heater.id);
+    s.tick(1 / 60, input({ aim: toward(fountain) }));
+    expect(s.currentTarget?.id).toBe(fountain.id);
+    // Looking at neither (straight away from the wall), it's back to the nearer one.
+    s.tick(1 / 60, input({ aim: Math.PI / 2 }));
+    expect(s.currentTarget?.id).toBe(fountain.id);
+  });
+});
+
 describe('ShiftSession stealth: cover, light, sight', () => {
   // Boss starts at 1 facing east, a desk (k) and a locker (O) sit between it and the player.
   const STEALTH = ['##########', '#1...k.P.#', '#2.......#', '#V..O...Z#', '##########'];

@@ -7,8 +7,11 @@ import type { ShiftSession } from '@core/session/ShiftSession';
 import * as THREE from 'three';
 import { bake, batchStatic } from './batching';
 import { mountRotation, toWorld } from './coords';
-import { createFloorTexture, createLightMap } from './floorTexture';
-import { shadeWithWorld, type MaterialKit } from './materials';
+import { createFloorMaterial, wallDetailTexture } from './floorTexture';
+import { buildInterior } from './interior';
+import { LightBaker } from './lightBaker';
+import type { TileVisibility } from './occlusion';
+import { GLOW, type MaterialKit } from './materials';
 import {
   buildBush,
   buildCoworker,
@@ -22,6 +25,7 @@ import {
   FIXTURE_MODELS,
   PROP_MODELS,
 } from './models';
+import { buildOutdoors, HORIZON } from './outdoors';
 import { PALETTE } from './palette';
 
 export const WALL_HEIGHT = 1.6;
@@ -61,7 +65,7 @@ export class WallCutaway {
   constructor(tiles: { col: number; row: number }[], kit: MaterialKit) {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     geometry.translate(0, 0.5, 0);
-    const side = kit.get(PALETTE.wallSide, { roughness: 0.92 });
+    const side = kit.wall(PALETTE.wallSide, 0.9);
     const top = kit.get(PALETTE.wallTop, { roughness: 0.9 });
     // BoxGeometry groups: +x, -x, +y (top), -y, +z, -z
     this.mesh = new THREE.InstancedMesh(
@@ -75,7 +79,7 @@ export class WallCutaway {
     dadoGeometry.translate(0, 0.5, 0);
     this.dado = new THREE.InstancedMesh(
       dadoGeometry,
-      kit.get(PALETTE.wallDado, { roughness: 0.6 }),
+      kit.wall(PALETTE.wallDado, 0.55),
       tiles.length,
     );
     this.dado.receiveShadow = true;
@@ -117,8 +121,16 @@ export class WallCutaway {
    * The camera is orthographic, so the hidden region is a straight strip running from the player
    * toward the camera, about as wide as the player and as long as a wall's shadow on the floor.
    * `toCamera` is the ground-plane direction toward the camera; `across` is screen-right.
+   * Pass `cutaway` false (first person: you're inside, nothing needs moving) to raise them all.
    */
-  update(px: number, pz: number, toCamera: THREE.Vector2, across: THREE.Vector2, dt: number) {
+  update(
+    px: number,
+    pz: number,
+    toCamera: THREE.Vector2,
+    across: THREE.Vector2,
+    dt: number,
+    cutaway = true,
+  ) {
     const k = Math.min(1, dt * 10);
     // A unit tile reaches this far either side of its center along a diagonal axis.
     const halfTile = 0.5 * (Math.abs(across.x) + Math.abs(across.y));
@@ -128,7 +140,8 @@ export class WallCutaway {
       const dz = this.rows[i]! + 0.5 - pz;
       const depth = dx * toCamera.x + dz * toCamera.y;
       const lateral = Math.abs(dx * across.x + dz * across.y);
-      const cut = depth > 0 && depth - halfTile < CUT_REACH && lateral < halfTile + CUT_HALF_WIDTH;
+      const cut =
+        cutaway && depth > 0 && depth - halfTile < CUT_REACH && lateral < halfTile + CUT_HALF_WIDTH;
       const target = cut ? WALL_CUT_HEIGHT : WALL_HEIGHT;
       const h = this.heights[i]!;
       if (Math.abs(h - target) < 0.001) continue;
@@ -143,6 +156,15 @@ export class WallCutaway {
   }
 }
 
+/** Something to hide when none of the tiles in its rectangle can be seen. */
+interface Cullable {
+  object: THREE.Object3D;
+  col0: number;
+  row0: number;
+  col1: number;
+  row1: number;
+}
+
 export interface DoorView {
   id: string;
   root: THREE.Group;
@@ -154,12 +176,29 @@ export interface DoorView {
 export interface World {
   walls: WallCutaway;
   doors: DoorView[];
-  floorTexture: THREE.Texture;
-  lightMap: THREE.Texture;
-  /** Per-frame ambience: shadows follow the view and the boiler fire flickers. */
+  /** The baked light map (re-bake it when a door opens). */
+  lights: LightBaker;
+  /** The floor and what lies under it: hidden while its own reflection is drawn. */
+  underfoot: THREE.Object3D[];
+  /** Show a reflection in the floor (see FloorMirror); null turns it off. */
+  reflect(texture: THREE.Texture | null, matrix: THREE.Matrix4, strength: number): void;
+  /** Per-frame ambience: shadows follow the view, the boiler fire flickers, clouds drift. */
   update(focusX: number, focusZ: number, time: number): void;
+  /**
+   * Dress the world for a view. First person adds what you'd see from inside (ceilings, lamps,
+   * sky, the land beyond the verge) and drops the fog of war, since what's on screen is simply
+   * what's in sight; top-down is the open-roofed diorama.
+   */
+  setFirstPerson(on: boolean): void;
+  /**
+   * First person: draw only the scenery the eye could see (rooms it can see into, the outdoors
+   * if any of it is in view). Pass null to draw everything again.
+   */
+  cull(seen: TileVisibility | null): void;
   /** Real-time shadow map size; 0 turns real-time shadows off. */
   setShadows(size: number): void;
+  /** Free what the world owns beyond the scene's own meshes and materials. */
+  dispose(): void;
 }
 
 /** Stable 0..1 per tile, so the same desk always gets the same book. */
@@ -169,10 +208,23 @@ const variantAt = (col: number, row: number) => {
 };
 
 /** Build the static diorama for a level: floor, walls, furniture, fixtures, van, lights. */
-export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: MaterialKit): World {
+export function buildWorld(
+  scene: THREE.Scene,
+  session: ShiftSession,
+  kit: MaterialKit,
+  renderer: THREE.WebGLRenderer,
+): World {
   const { level } = session;
   const cols = level.cols;
   const rows = level.rows;
+  const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+  // Light first: every material below samples it.
+  const lights = new LightBaker(renderer, session);
+  kit.shading.uLightMap.value = lights.texture;
+  kit.shading.uLightScale.value = lights.scale;
+  const wallDetail = wallDetailTexture(anisotropy);
+  kit.shading.uWallDetail.value = wallDetail;
 
   // Tabletop slab + grass verge.
   const margin = 3;
@@ -192,14 +244,15 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
   verge.receiveShadow = true;
   scene.add(verge);
 
-  // Floor plan.
-  const floorTexture = createFloorTexture(level);
-  const floorMat = shadeWithWorld(
-    new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.8 }),
+  // Floor plan. Phones get smaller floor layers: they're short on texture memory.
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const floorSurface = createFloorMaterial(
+    level,
     kit.shading,
+    coarsePointer ? 256 : 512,
+    anisotropy,
   );
-  const lightMap = createLightMap(level);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(cols, rows), floorMat);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(cols, rows), floorSurface.material);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(cols / 2, 0, rows / 2);
   floor.receiveShadow = true;
@@ -258,7 +311,27 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
   statics.push(coworker);
 
   dressGrounds(level, kit, statics);
-  scene.add(batchStatic(statics, kit, 12));
+  // One batch per room (long hallways and the grounds in 12-tile stretches), so first person
+  // can skip whole rooms it can't see into.
+  const batches = batchStatic(statics, kit, (x, z) => {
+    const room = roomAt(level, Math.floor(x), Math.floor(z));
+    if (!room || room.kind === 'exterior') return `${Math.floor(x / 12)},${Math.floor(z / 12)}`;
+    const { col, row } = room.rect;
+    return `${room.id}:${Math.floor((x - col) / 12)},${Math.floor((z - row) / 12)}`;
+  });
+  scene.add(batches);
+  /** Scenery that can be skipped when its tiles are out of sight. */
+  const cullable: Cullable[] = [];
+  for (const mesh of batches.children as THREE.Mesh[]) {
+    const { min, max } = mesh.geometry.boundingBox!;
+    cullable.push({
+      object: mesh,
+      col0: min.x - 0.5,
+      row0: min.z - 0.5,
+      col1: max.x + 0.5,
+      row1: max.z + 0.5,
+    });
+  }
 
   // Locked doors span the gap between their two wall neighbours (they swing, so no batching).
   const doors: DoorView[] = session.doors
@@ -271,10 +344,27 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
         tileAt(level, d.tile.col + 1, d.tile.row) === 'wall';
       root.rotation.y = wallsLeftRight ? 0 : Math.PI / 2;
       scene.add(root);
+      const { col, row } = d.tile;
+      cullable.push({ object: root, col0: col - 1, row0: row - 1, col1: col + 1, row1: row + 1 });
       return { id: d.id, root, leaf, open: 0 };
     });
 
-  hangDecor(level, walls, kit, scene);
+  for (const hung of hangDecor(level, walls, kit, scene)) {
+    // Seen from the tile it faces.
+    const { object, col, row } = hung;
+    cullable.push({ object, col0: col, row0: row, col1: col, row1: row });
+  }
+  const exteriors = level.rooms.filter((r) => r.kind === 'exterior').map((r) => r.rect);
+
+  // Only seen from inside (see setFirstPerson).
+  const interior = buildInterior(level, kit, lights.lamps, WALL_HEIGHT, anisotropy);
+  const outdoors = buildOutdoors(level, kit, SUN_OFFSET);
+  interior.visible = false;
+  outdoors.group.visible = false;
+  scene.add(interior, outdoors.group);
+  // Distance haze, for first person only; at zero density it costs nothing to keep around.
+  const haze = new THREE.FogExp2(HORIZON.getHex(), 0);
+  scene.fog = haze;
 
   // Lighting: soft sky fill + a warm key light whose shadows follow the view.
   scene.add(new THREE.HemisphereLight(0xe3ecff, 0x40362c, 0.95));
@@ -292,7 +382,7 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.bias = -0.0005;
   sun.shadow.normalBias = 0.025;
-  sun.shadow.radius = 2;
+  sun.shadow.radius = 3.5;
   scene.add(sun, sun.target);
 
   // Boiler fire glow.
@@ -310,8 +400,9 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
   return {
     walls,
     doors,
-    floorTexture,
-    lightMap,
+    lights,
+    underfoot: [slab, verge, floor, outdoors.ground],
+    reflect: (texture, matrix, strength) => floorSurface.reflect(texture, matrix, strength),
     update(focusX, focusZ, time) {
       // Snap the shadow area to its texel grid so shadows don't shimmer as the view moves.
       const texel = (SHADOW_EXTENT * 2) / sun.shadow.mapSize.x;
@@ -324,8 +415,30 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
         Math.sin(time * 9.1) * 0.12 +
         Math.sin(time * 23.7) * 0.08 +
         Math.sin(time * 3.3) * 0.1;
-      fire.emissiveIntensity = 0.7 + flicker * 0.6;
+      fire.emissiveIntensity = GLOW * (0.7 + flicker * 0.6);
       if (glow) glow.intensity = 3.2 + flicker * 2;
+      outdoors.update(time);
+    },
+    setFirstPerson(on) {
+      interior.visible = on;
+      outdoors.group.visible = on;
+      haze.density = on ? 0.011 : 0;
+      kit.shading.uFogOn.value = on ? 0 : 1;
+      kit.shading.uRoofed.value = on ? 1 : 0;
+      // Indoors the lamps should do the lighting, not an even glow from all around.
+      scene.environmentIntensity = on ? 0.3 : 0.5;
+    },
+    cull(seen) {
+      // Sky, far ground and distant trees: only if some of the outdoors is in view.
+      const outside =
+        !seen || exteriors.some((r) => seen.anyIn(r.col, r.row, r.col + r.w - 1, r.row + r.h - 1));
+      outdoors.group.visible = interior.visible && outside;
+      for (const c of cullable) {
+        // Anything reaching past the edge of the map is out on the verge.
+        const onVerge = c.col0 < 0 || c.row0 < 0 || c.col1 >= cols || c.row1 >= rows;
+        c.object.visible =
+          !seen || seen.anyIn(c.col0, c.row0, c.col1, c.row1) || (onVerge && outside);
+      }
     },
     setShadows(size) {
       sun.castShadow = size > 0;
@@ -334,6 +447,12 @@ export function buildWorld(scene: THREE.Scene, session: ShiftSession, kit: Mater
         sun.shadow.map?.dispose();
         sun.shadow.map = null;
       }
+    },
+    dispose() {
+      lights.dispose();
+      floorSurface.dispose();
+      wallDetail.dispose();
+      outdoors.dispose();
     },
   };
 }
@@ -405,7 +524,14 @@ const TALL_WALL_ITEMS = new Set([
  * Hang decor on the wall faces the camera can see (south and west faces): windows outside,
  * chalkboards and clocks in classrooms, notices and posters in halls, mirrors in restrooms.
  */
-function hangDecor(level: LevelDef, walls: WallCutaway, kit: MaterialKit, scene: THREE.Scene) {
+function hangDecor(
+  level: LevelDef,
+  walls: WallCutaway,
+  kit: MaterialKit,
+  scene: THREE.Scene,
+): { object: THREE.Object3D; col: number; row: number }[] {
+  /** Everything hung, with the tile each piece faces. */
+  const hung: { object: THREE.Object3D; col: number; row: number }[] = [];
   const occupied = new Set<string>();
   for (const f of level.fixtures)
     if (TALL_WALL_ITEMS.has(f.defId)) occupied.add(`${f.tile.col},${f.tile.row}`);
@@ -424,6 +550,11 @@ function hangDecor(level: LevelDef, walls: WallCutaway, kit: MaterialKit, scene:
     }
     walls.attach(col, row, baked);
     scene.add(baked);
+    hung.push(
+      face === 'south'
+        ? { object: baked, col, row: row + 1 }
+        : { object: baked, col: col - 1, row },
+    );
   };
 
   // Windows on the outside of the building.
@@ -519,6 +650,7 @@ function hangDecor(level: LevelDef, walls: WallCutaway, kit: MaterialKit, scene:
         break;
     }
   }
+  return hung;
 }
 
 /** Wall tiles along a room's north or east edge whose face looks into the room. */

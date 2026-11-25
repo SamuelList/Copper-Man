@@ -5,9 +5,11 @@ import { GameView } from '@game/GameView';
 import { useAppStore } from '@state/appStore';
 import { useCareerStore } from '@state/careerStore';
 import { useInputMode } from '@state/inputMode';
+import { useSettings } from '@state/settingsStore';
 import { useShiftStore } from '@state/shiftStore';
 import { useCallback, useState } from 'react';
 import { Button, Kbd, Panel } from '../components';
+import { ViewSwitch } from '../components/ViewSwitch';
 import { Hud } from '../hud/Hud';
 import styles from './screens.module.css';
 
@@ -15,6 +17,7 @@ function PauseOverlay() {
   const setPaused = useShiftStore((s) => s.setPaused);
   const controller = useShiftStore((s) => s.controller);
   const touch = useInputMode((s) => s.mode === 'touch');
+  const firstPerson = useSettings((s) => s.view === 'fps');
   return (
     <div className={styles.overlay} role="dialog" aria-label="Paused">
       <Panel className={styles.pauseBox}>
@@ -31,15 +34,23 @@ function PauseOverlay() {
         >
           Clock out early
         </Button>
+        <ViewSwitch />
         {touch ? (
           <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
             Drag on the left to walk. Hold 🏃 to sprint and ✋ to scrap, unlock and sell. Tap
             gadgets to use them.
+            {firstPerson && ' Drag on the right to look around.'}
           </p>
         ) : (
           <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>
             <Kbd>WASD</Kbd> move · <Kbd>Shift</Kbd> sprint · <Kbd>E</Kbd> interact · <Kbd>Q</Kbd>{' '}
-            ability · <Kbd>1</Kbd>-<Kbd>3</Kbd> gadgets · <Kbd>Esc</Kbd> pause
+            ability · <Kbd>1</Kbd>-<Kbd>3</Kbd> gadgets · <Kbd>V</Kbd> view · <Kbd>Esc</Kbd> pause
+            {firstPerson && (
+              <>
+                <br />
+                Click the game to look with the mouse, or turn with <Kbd>←</Kbd> <Kbd>→</Kbd>
+              </>
+            )}
           </p>
         )}
       </Panel>

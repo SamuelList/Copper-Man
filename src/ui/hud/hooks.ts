@@ -1,5 +1,6 @@
 import type { Bag } from '@core/model/types';
 import { useInputMode } from '@state/inputMode';
+import { useSettings } from '@state/settingsStore';
 import { useShiftStore } from '@state/shiftStore';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -10,6 +11,9 @@ import { useShallow } from 'zustand/react/shallow';
  */
 
 export const useTouch = () => useInputMode((s) => s.mode === 'touch');
+
+/** Seeing the shift through the worker's eyes rather than from above. */
+export const useFirstPerson = () => useSettings((s) => s.view === 'fps');
 
 /** Seconds left at which the clock turns red. */
 export const LOW_TIME = 30;

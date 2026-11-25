@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OVERLAY_LAYER } from './layers';
 
 /**
  * Fixed axonometric camera: true isometric angles (45° around, ~35.26° down), looking north-east
@@ -20,6 +21,7 @@ export class IsoCamera {
 
   constructor() {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+    this.camera.layers.enable(OVERLAY_LAYER);
   }
 
   /** World units across the screen's shorter side, from its size in CSS pixels. */

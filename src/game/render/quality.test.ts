@@ -19,6 +19,12 @@ describe('QualityGovernor', () => {
     expect(new QualityGovernor(1).current.ratio).toBe(1);
   });
 
+  it('starts at the bottom when there is no graphics card', () => {
+    const q = new QualityGovernor(2, true);
+    expect(q.level).toBe(QUALITY.length - 1);
+    expect(q.current.effects).toBe(0);
+  });
+
   it('leaves a smooth game alone', () => {
     const q = new QualityGovernor(2);
     expect(run(q, 60, 30)).toEqual([]);
@@ -52,5 +58,21 @@ describe('QualityGovernor', () => {
     run(q, 60, 3);
     q.sample(30); // back from a background tab
     expect(q.level).toBe(0);
+  });
+
+  it('sheds post-processing before shadows, and all of it at the bottom', () => {
+    const effects = QUALITY.map((l) => l.effects);
+    expect(effects).toEqual([...effects].sort((a, b) => b - a));
+    expect(QUALITY.every((l) => l.effects > 0 || l.shadows === 0)).toBe(true);
+    expect(QUALITY[QUALITY.length - 1]!.effects).toBe(0);
+  });
+
+  it('stays put once pinned', () => {
+    const q = new QualityGovernor(2);
+    q.pin(3);
+    expect(run(q, 8, 12)).toEqual([]);
+    expect(q.level).toBe(3);
+    q.pin(99);
+    expect(q.level).toBe(QUALITY.length - 1);
   });
 });

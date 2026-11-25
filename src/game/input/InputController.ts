@@ -2,7 +2,10 @@ import { CONSUMABLES } from '@core/content/consumables';
 import type { PlayerInput } from '@core/session/types';
 import { virtualInput } from '@state/virtualInput';
 
-/** Ground-plane basis of the screen, so "W" walks toward the top of the screen. */
+/**
+ * Ground-plane basis for movement: "W" walks along `screenUp`, "D" along `screenRight`. The
+ * top-down camera's is fixed; in first person it turns with where you look.
+ */
 export interface ScreenBasis {
   screenUp: { x: number; y: number };
   screenRight: { x: number; y: number };
@@ -20,6 +23,7 @@ const GAME_KEYS = new Set([
   'KeyD',
   'KeyE',
   'KeyQ',
+  'KeyV',
   'ShiftLeft',
   'ShiftRight',
   'Digit1',
@@ -36,14 +40,15 @@ const STICK_FULL = 0.55;
 
 /**
  * Turns the keyboard and the on-screen touch controls into world-space `PlayerInput`. Movement is
- * screen-relative (rotated into the fixed camera's frame). Held actions are polled; one-shot
- * actions (ability, gadgets, pause) are queued on keydown or tap so a quick press
- * is never lost between frames.
+ * relative to the view (rotated into the camera's frame). Held actions are polled; one-shot
+ * actions (ability, gadgets, pause, switching view) are queued on keydown or tap so a quick
+ * press is never lost between frames.
  */
 export class InputController {
   private readonly held = new Set<string>();
   private abilityQueued = false;
   private pauseQueued = false;
+  private viewQueued = false;
   private useQueued: string | null = null;
 
   constructor(private readonly target: Window = window) {
@@ -65,6 +70,7 @@ export class InputController {
     if (e.repeat) return;
     this.held.add(e.code);
     if (e.code === 'KeyQ') this.abilityQueued = true;
+    if (e.code === 'KeyV') this.viewQueued = true;
     const gadget = GADGET_KEYS.get(e.code);
     if (gadget) this.useQueued = gadget;
   };
@@ -82,12 +88,18 @@ export class InputController {
     return codes.some((c) => this.held.has(c));
   }
 
-  read(basis: ScreenBasis): PlayerInput {
+  /**
+   * This frame's input. In first person the left and right arrows turn you (see `turn`) rather
+   * than strafe, so the whole game can be played from the keyboard alone.
+   */
+  read(basis: ScreenBasis, firstPerson = false): PlayerInput {
     for (const action of virtualInput.drain()) {
       if (action.type === 'ability') this.abilityQueued = true;
       else this.useQueued = action.id;
     }
-    let sx = Number(this.down('KeyD', 'ArrowRight')) - Number(this.down('KeyA', 'ArrowLeft'));
+    let sx = firstPerson
+      ? Number(this.down('KeyD')) - Number(this.down('KeyA'))
+      : Number(this.down('KeyD', 'ArrowRight')) - Number(this.down('KeyA', 'ArrowLeft'));
     let sy = Number(this.down('KeyW', 'ArrowUp')) - Number(this.down('KeyS', 'ArrowDown'));
     if (sx === 0 && sy === 0) {
       // Analog stick: ease off for a slow walk; full speed from about half way out.
@@ -112,6 +124,18 @@ export class InputController {
       ability,
       use,
     };
+  }
+
+  /** Arrow keys held to turn in first person: -1 left, 1 right. */
+  turn(): number {
+    return Number(this.down('ArrowRight')) - Number(this.down('ArrowLeft'));
+  }
+
+  /** True once per press of the switch-view key (V). */
+  viewPressed(): boolean {
+    const pressed = this.viewQueued;
+    this.viewQueued = false;
+    return pressed;
   }
 
   /** True once per Esc press. */
