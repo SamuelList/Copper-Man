@@ -40,8 +40,12 @@ export function CharacterSelectScreen() {
     startShift();
   };
 
-  const pick = (id: string) => {
-    if (tappedTwice(id)) hire(id);
+  /**
+   * `byPointer` is false for a click that came from the keyboard (Enter or Space on the card):
+   * those only ever choose. A held key repeats faster than any double tap.
+   */
+  const pick = (id: string, byPointer: boolean) => {
+    if (byPointer && tappedTwice(id)) hire(id);
     else setSelected(id);
   };
 
@@ -65,7 +69,7 @@ export function CharacterSelectScreen() {
                 .filter(Boolean)
                 .join(' ')}
               style={{ '--accent': accent } as CSSProperties}
-              onClick={() => pick(c.id)}
+              onClick={(e) => pick(c.id, e.detail > 0)}
             >
               <div style={{ display: 'flex', gap: '0.9rem', alignItems: 'center' }}>
                 <div className={styles.avatar} aria-hidden />

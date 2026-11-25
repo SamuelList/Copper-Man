@@ -75,7 +75,14 @@ async function clockIn(view: Page | FrameLocator) {
   await view.getByRole('button', { name: 'New Career' }).tap();
   await view.getByRole('radio', { name: /Tomothy/ }).tap();
   await view.getByRole('button', { name: /Hire Tomothy/ }).tap();
+  // The thumb controls are there as soon as the screen is; the top bar only once the engine
+  // has been built and has said something. And it must not have given up instead.
   await expect(view.getByTestId('touch-controls')).toBeVisible({ timeout: 60_000 });
+  await expect(view.getByTestId('touch-bar')).toBeVisible({ timeout: 60_000 });
+  // The cover lifts on the first frame drawn (or on a failure, which the alert would show).
+  await expect(view.locator('[data-done="false"]')).toHaveCount(0, { timeout: 60_000 });
+  await expect(view.locator('canvas')).toBeVisible();
+  await expect(view.getByRole('alert')).toHaveCount(0);
 }
 
 test('fits its frame and starts a shift on a phone held upright', async ({ page }, testInfo) => {
@@ -93,6 +100,10 @@ test('fits its frame and starts a shift on a phone held upright', async ({ page 
   const start = (await page.getByRole('button', { name: 'New Career' }).boundingBox())!;
   expect(start.y).toBeGreaterThanOrEqual(top);
   expect(start.y + start.height).toBeLessThanOrEqual(bottom);
+  // The host's own text size (14px on its body) stays the host's: the game keeps its own, and
+  // with it buttons a thumb can hit.
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe('16px');
+  expect(start.height).toBeGreaterThanOrEqual(44);
   await clockIn(page);
   expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(screen.height);
 

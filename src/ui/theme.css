@@ -62,6 +62,9 @@ html {
 body {
   background: var(--bg);
   color: var(--text);
+  /* Said outright: a page this is embedded in may have set a size of its own on the body. */
+  font-size: 1rem;
+  line-height: normal;
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;

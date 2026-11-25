@@ -31,9 +31,8 @@ describe('QualityGovernor', () => {
     expect(new QualityGovernor(2, { last: at(5) }).level).toBe(4);
     expect(new QualityGovernor(2, { last: at(1) }).level).toBe(0);
     expect(new QualityGovernor(2, { last: at(0) }).level).toBe(0);
-    // Never sharper than the screen can show, nor better than a software renderer can run.
-    expect(new QualityGovernor(1, { last: at(2) }).level).toBe(new QualityGovernor(1).level);
-    expect(new QualityGovernor(2, { software: true, last: at(3) }).level).toBe(QUALITY.length - 1);
+    // Never better than a software renderer can run.
+    expect(new QualityGovernor(2, { software: true, last: at(3) }).current.effects).toBe(0);
 
     const q = new QualityGovernor(2);
     run(q, 38, 30);
@@ -46,13 +45,51 @@ describe('QualityGovernor', () => {
     expect(q.settled).toBeNull();
   });
 
+  it('has nothing to hand on until it has weighed a sample', () => {
+    // A shift quit in its first seconds (or an engine replaced while paused) is not a shift
+    // survived: the next one must not climb on the strength of it.
+    const q = new QualityGovernor(2, { last: { level: 5, pace: 60 } });
+    expect(q.level).toBe(4);
+    run(q, 60, 2.9); // still warming up
+    expect(q.settled).toBeNull();
+    run(q, 60, 2);
+    expect(q.settled).toEqual({ level: 4, pace: 60 });
+  });
+
+  it('fits the ladder to the screen: nothing sharper than it, and no step that changes nothing', () => {
+    // An ordinary monitor: every rung is at most 1x, and the first step down is a real one.
+    const monitor = new QualityGovernor(1);
+    expect(monitor.current).toMatchObject({ ratio: 1, effects: 2, mirror: true });
+    const before = { ...monitor.current };
+    run(monitor, 38, 6.1);
+    expect(monitor.current).not.toEqual(before);
+    expect(monitor.current.ratio).toBe(1);
+    // A phone whose screen is 1.5x still starts with the mirrored floor (the phone ladder
+    // gives that up before sharpness, so the first rung at 1.5x no longer has it).
+    const phone = new QualityGovernor(1.5, { ladder: PHONE_QUALITY });
+    expect(phone.current).toMatchObject({ ratio: 1.5, mirror: true, effects: 2 });
+    run(phone, 40, 6.1);
+    expect(phone.current).toMatchObject({ ratio: 1.5, mirror: false, effects: 2 });
+    // The rung below that on the full ladder (the same thing at 1.5x) isn't a step here:
+    // when it struggles, the next one down is lighter effects.
+    run(phone, 25, 6.1);
+    expect(phone.current).toMatchObject({ ratio: 1.5, mirror: false, effects: 1 });
+  });
+
+  it('does not mistake hitches for a low frame rate', () => {
+    // One frame in twelve takes a fifth of a second (a shader compiling, a buffer uploading):
+    // by the plain average that is about 31 frames a second, well under the target.
+    const q = new QualityGovernor(2);
+    const frames = Array.from({ length: 1200 }, (_, i) => (i % 12 === 0 ? 0.2 : 1 / 60));
+    expect(frames.length / frames.reduce((a, b) => a + b)).toBeLessThan(45);
+    for (const f of frames) q.sample(f);
+    expect(q.level).toBe(0);
+  });
+
   it('treats 30 frames a second as full speed where that is all the screen is given', () => {
     // Low Power Mode: the browser calls back 30 times a second however fast the phone is.
     const q = new QualityGovernor(3, { displayHz: 30 });
     expect(run(q, 30, 60)).toEqual([]);
-    // The odd long frame doesn't change that.
-    for (let i = 0; i < 1800; i++) q.sample(i % 30 === 0 ? 0.12 : 1 / 30);
-    expect(q.level).toBe(0);
     // A phone that can't hold even that still sheds load.
     run(q, 18, 30);
     expect(q.level).toBeGreaterThan(0);
@@ -61,7 +98,7 @@ describe('QualityGovernor', () => {
 
   it('follows the screen when its rate is measured again', () => {
     const q = new QualityGovernor(2);
-    q.setDisplayRate(30);
+    expect(q.setDisplayRate(30)).toBe(false);
     expect(run(q, 30, 30)).toEqual([]);
     // Back at 60, a steady 30 is slow again.
     q.setDisplayRate(60);
@@ -72,6 +109,26 @@ describe('QualityGovernor', () => {
     expect(run(fast, 60, 30)).toEqual([]);
   });
 
+  it('starts over when it learns the screen was being held back all along', () => {
+    // Low Power Mode comes on mid-shift: frames arrive at 30, and it sheds levels chasing 60.
+    const q = new QualityGovernor(3, { ladder: PHONE_QUALITY });
+    run(q, 30, 30);
+    expect(q.level).toBeGreaterThan(0);
+    // A pause measures the screen again. Nothing it gave up was the phone's fault.
+    expect(q.setDisplayRate(30)).toBe(true);
+    expect(q.level).toBe(0);
+    expect(run(q, 30, 30)).toEqual([]);
+    expect(q.settled).toEqual({ level: 0, pace: 30 });
+    // Not for a level held by hand, nor where there is no graphics card to do better with.
+    const held = new QualityGovernor(2);
+    held.pin(6);
+    expect(held.setDisplayRate(30)).toBe(false);
+    expect(held.level).toBe(6);
+    const software = new QualityGovernor(2, { software: true });
+    expect(software.setDisplayRate(30)).toBe(false);
+    expect(software.current.effects).toBe(0);
+  });
+
   it('corrects itself when the screen turns out faster than it was told', () => {
     // Measured at 30 before the first tap; the game then runs at 60, later sagging to 40.
     const q = new QualityGovernor(2, { displayHz: 30 });
@@ -79,14 +136,18 @@ describe('QualityGovernor', () => {
     run(q, 40, 30);
     expect(q.level).toBeGreaterThan(0);
     expect(q.settled?.pace).toBe(60);
+    // (The engine passes the measured rate on only when it changes: telling the governor 30
+    // again every frame would undo this.)
   });
 
   it('is not rushed down the ladder by the stall of its own last step', () => {
     const q = new QualityGovernor(2);
     run(q, 38, 6.1); // warm-up, then two slow samples: one step down
     expect(q.level).toBe(1);
-    // Rebuilding the render targets makes the next sample look terrible. It isn't counted.
+    // Rebuilding the render targets makes the next sample look terrible. It isn't counted, so
+    // one slow sample after it is still only one.
     run(q, 6, 1.6);
+    run(q, 38, 1.6);
     run(q, 60, 6);
     expect(q.level).toBe(1);
   });

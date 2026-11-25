@@ -45,6 +45,9 @@ describe('CharacterSelectScreen', () => {
     const dunkin = screen.getByRole('radio', { name: /Dunkin/ });
     const screenNow = () => useAppStore.getState().screen;
 
+    // A tap or click (a click made with the keyboard has a count of 0).
+    const tap = (card: HTMLElement) => fireEvent.click(card, { detail: 1 });
+
     // A double tap that began on the screen before (its first tap opened this one) picks a
     // worker; it doesn't hire them.
     clock.mockReturnValue(1000);
@@ -53,16 +56,25 @@ describe('CharacterSelectScreen', () => {
     expect(screenNow()).toBe('title');
     // Nor do taps on two different cards, however quick...
     clock.mockReturnValue(1100);
-    fireEvent.click(dunkin);
+    tap(dunkin);
     expect(screenNow()).toBe('title');
     expect(dunkin).toHaveAttribute('aria-checked', 'true');
-    // ...or two taps on one card with a pause between them.
+    // ...or two taps on one card with a pause between them...
     clock.mockReturnValue(2000);
-    fireEvent.click(dunkin);
+    tap(dunkin);
     expect(screenNow()).toBe('title');
-    // Two in a row do.
-    clock.mockReturnValue(2200);
-    fireEvent.click(dunkin);
+    // ...or Enter held down on a card, which repeats faster than any thumb.
+    for (const at of [3000, 3030, 3060, 3090]) {
+      clock.mockReturnValue(at);
+      fireEvent.click(dalton, { detail: 0 });
+    }
+    expect(screenNow()).toBe('title');
+    expect(dalton).toHaveAttribute('aria-checked', 'true');
+    // Two taps in a row do.
+    clock.mockReturnValue(4000);
+    tap(dunkin);
+    clock.mockReturnValue(4200);
+    tap(dunkin);
     expect(screenNow()).toBe('shift');
     expect(useCareerStore.getState().characterId).toBe('dunkin');
     clock.mockRestore();

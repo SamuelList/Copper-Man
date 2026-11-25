@@ -220,7 +220,8 @@ export class GameEngine {
         params.session && lastQuality
           ? { ...lastQuality, level: lastQuality.level + 1 }
           : lastQuality,
-      displayHz: displayRate.hz,
+      // (And it goes on believing what that shift had worked out about the screen.)
+      displayHz: params.session && lastQuality ? lastQuality.pace : displayRate.hz,
     });
     this.fedHz = displayRate.hz;
     this.renderer.setPixelRatio(this.quality.current.ratio);
@@ -599,7 +600,7 @@ export class GameEngine {
     // of the rate from what it sees in play, and repeating an old measurement would undo that.
     if (displayRate.hz !== this.fedHz) {
       this.fedHz = displayRate.hz;
-      this.quality.setDisplayRate(this.fedHz);
+      if (this.quality.setDisplayRate(this.fedHz)) this.applyQuality();
     }
     // Only frames that were drawn for play say how well the device is keeping up.
     if (!idle && !this.lost && this.quality.sample(raw) !== null) this.applyQuality();

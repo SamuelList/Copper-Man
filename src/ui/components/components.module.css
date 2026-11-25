@@ -4,6 +4,8 @@
   background: var(--bg-raised);
   color: var(--text);
   padding: 0.7rem 1.4rem;
+  /* Never smaller than a thumb, whatever font the label falls back to. */
+  min-height: 44px;
   border-radius: var(--radius);
   font-weight: 700;
   letter-spacing: 0.02em;

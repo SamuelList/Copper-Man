@@ -53,7 +53,7 @@ const turned = (from: number, to: number) => Math.atan2(Math.sin(to - from), Mat
 
 async function waitForSession(page: Page) {
   await page.waitForFunction(() => Boolean((window as DebugWindow).__copper?.session), null, {
-    timeout: 20_000,
+    timeout: 60_000,
   });
 }
 
@@ -75,7 +75,8 @@ test('a full day: hire, sneak, sprint, sell, clock out, shop, next day', async (
   await page.getByRole('radio', { name: /Dalton/ }).click();
   await page.getByRole('button', { name: /Hire Dalton/ }).click();
 
-  await expect(page.locator('canvas')).toBeVisible();
+  // The world is built a moment after the screen appears; a software renderer takes a while.
+  await expect(page.locator('canvas')).toBeVisible({ timeout: 60_000 });
   await waitForSession(page);
   await expect(page.getByTestId('hud')).toBeVisible();
   await drawAtFullQuality(page);
@@ -134,7 +135,8 @@ test('a full day: hire, sneak, sprint, sell, clock out, shop, next day', async (
     return { elapsed: copper.session.elapsed, x: copper.session.player.pos.x, door: door.id };
   });
   await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
-  await expect(page.locator('canvas:not([data-lost])')).toBeVisible();
+  // (Building a world takes a software renderer a few seconds, as it did at the start.)
+  await expect(page.locator('canvas:not([data-lost])')).toBeVisible({ timeout: 60_000 });
   await expect(page.locator('canvas[data-lost]')).toHaveCount(0);
   await waitForSession(page);
   const carriedOn = await page.evaluate((doorId) => {

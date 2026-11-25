@@ -76,6 +76,14 @@ const HITCHES = 0.1;
  */
 const paceFor = (hz: number) => (hz <= 40 ? 30 : hz < 56 ? 50 : 60);
 
+/** Would two rungs come out the same on screen? */
+const sameLevel = (a: QualityLevel, b: QualityLevel) =>
+  a.ratio === b.ratio &&
+  a.reflections === b.reflections &&
+  a.shadows === b.shadows &&
+  a.effects === b.effects &&
+  a.mirror === b.mirror;
+
 /** Frames a second over a run of frame times, leaving out its few slowest. */
 function steadyRate(frames: number[]): number {
   frames.sort((a, b) => a - b);
@@ -136,27 +144,38 @@ export class QualityGovernor {
   private slow = 0;
   private warmup = WARMUP;
   private pinned = false;
+  /** Has it ever weighed a sample? Until then it knows nothing about the device. */
+  private judged = false;
   private pace: number;
+  /**
+   * The ladder as this screen sees it: no rung sharper than the screen itself, and no two in a
+   * row that would come out the same here (a step has to change something).
+   */
   private readonly ladder: readonly QualityLevel[];
   /** Lowest level that still has every effect: where a device that is only a little slow stops. */
   private readonly keepEffects: number;
+  /** Where a governor with nothing to go on starts: the top, or the bottom without a GPU. */
+  private readonly top: number;
 
   constructor(devicePixelRatio: number, options: GovernorOptions = {}) {
-    this.ladder = options.ladder ?? QUALITY;
+    this.ladder = (options.ladder ?? QUALITY)
+      .map((q) => ({ ...q, ratio: Math.min(q.ratio, devicePixelRatio) }))
+      .filter((q, i, all) => i === 0 || !sameLevel(q, all[i - 1]!));
     this.keepEffects = this.ladder.reduce((last, q, i) => (q.effects === 2 ? i : last), 0);
-    const sharpest = Math.max(
-      0,
-      this.ladder.findIndex((q) => q.ratio <= devicePixelRatio),
-    );
     const bottom = this.ladder.length - 1;
+    this.top = options.software ? bottom : 0;
     this.pace = paceFor(options.displayHz ?? 60);
     const last = options.last?.pace === this.pace ? options.last.level : 0;
-    this.level = options.software ? bottom : Math.min(bottom, Math.max(sharpest, last - 1));
+    this.level = Math.min(bottom, Math.max(this.top, last - 1));
   }
 
-  /** What to hand to the next governor, or null if this one was pinned rather than adapting. */
+  /**
+   * What to hand to the next governor. Null if this one has nothing to say about the device:
+   * it was pinned rather than adapting, or it never ran long enough to weigh a sample (a
+   * shift quit in its first seconds mustn't count as a shift survived).
+   */
   get settled(): Settled | null {
-    return this.pinned ? null : { level: this.level, pace: this.pace };
+    return this.pinned || !this.judged ? null : { level: this.level, pace: this.pace };
   }
 
   get current(): QualityLevel {
@@ -169,12 +188,22 @@ export class QualityGovernor {
     this.pinned = true;
   }
 
-  /** The screen's refresh rate has been measured again (see `GovernorOptions.displayHz`). */
-  setDisplayRate(hz: number) {
+  /**
+   * The screen's refresh rate has been measured again (see `GovernorOptions.displayHz`).
+   * Returns true if that changed the level: learning the screen is held to a lower rate means
+   * whatever was given up chasing the higher one was given up for nothing, so it starts over
+   * from the top and is judged against the rate there really is.
+   */
+  setDisplayRate(hz: number): boolean {
     const pace = paceFor(hz);
-    if (pace === this.pace) return;
+    if (pace === this.pace) return false;
+    const lower = pace < this.pace;
     this.pace = pace;
     this.slow = 0;
+    if (!lower || this.pinned || this.level === this.top) return false;
+    this.level = this.top;
+    this.warmup = 1;
+    return true;
   }
 
   /**
@@ -194,6 +223,7 @@ export class QualityGovernor {
       this.warmup--;
       return null;
     }
+    this.judged = true;
     // Clearly faster than the screen was thought to manage: it was measured too low (a browser
     // runs an embedded page at half rate until it's touched).
     if (fps > this.pace * 1.3) this.pace = 60;
